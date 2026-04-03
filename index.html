@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>锦书·灵犀阁 | 角色扮演+群聊</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { background: #c4aa7b; min-height: 100vh; padding: 16px; font-family: '华文楷书', '楷体', 'Microsoft YaHei', serif; }
+        .main-container { max-width: 1400px; margin: 0 auto; background: #fef7e8; border-radius: 4px 20px 20px 20px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.4); padding: 16px 20px 20px; position: relative; }
+        .main-container::before { content: "✉"; position: absolute; top: -18px; left: 20px; font-size: 32px; color: #b48c48; background: #fef7e8; padding: 0 10px; }
+
+        .mode-switch { display: flex; gap: 12px; justify-content: center; margin-bottom: 20px; }
+        .mode-btn { background: #e8dcc8; border: none; padding: 8px 24px; border-radius: 40px; font-family: inherit; font-size: 1rem; cursor: pointer; transition: all 0.2s; color: #5a3c24; }
+        .mode-btn.active { background: #a57748; color: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+
+        .two-layout { display: flex; gap: 20px; flex-wrap: wrap; }
+        .chat-section { flex: 2; min-width: 260px; }
+        .settings-section { flex: 1.5; min-width: 260px; background: #fcf5e6; border-radius: 20px; padding: 16px; border: 1px solid #ebddc0; transition: all 0.2s; }
+        .settings-header { display: none; cursor: pointer; background: #e8dcc8; padding: 8px 12px; border-radius: 30px; margin-bottom: 12px; text-align: center; font-weight: bold; color: #5a3c24; }
+        @media (max-width: 700px) { .settings-section.collapsed .settings-content { display: none; } .settings-header { display: block; } }
+
+        .character-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid #e6d5b8; padding-bottom: 10px; }
+        .char-tab { background: #e8dcc8; border: none; padding: 6px 14px; border-radius: 30px; font-family: inherit; font-size: 0.8rem; cursor: pointer; }
+        .char-tab.active { background: #a57748; color: white; }
+        .add-char-btn { background: #dac292; border: none; padding: 6px 14px; border-radius: 30px; cursor: pointer; font-size: 0.75rem; }
+
+        .correspondence { background: rgba(250, 245, 235, 0.7); border-radius: 16px; padding: 12px; height: 460px; overflow-y: auto; margin-bottom: 12px; }
+        .write-area { background: #fffbf0; border-radius: 28px; padding: 8px 12px; display: flex; gap: 8px; }
+        .write-area input { flex: 1; background: #fffef9; border: 1px solid #e6d2b0; border-radius: 40px; padding: 8px 16px; font-family: inherit; font-size: 0.85rem; }
+        .write-area button { background: #a57748; border: none; color: white; padding: 6px 16px; border-radius: 40px; cursor: pointer; }
+
+        .field { margin-bottom: 12px; }
+        .field label { display: block; font-size: 0.7rem; color: #7c5a3c; margin-bottom: 3px; font-weight: bold; }
+        .field input, .field textarea, .field select { width: 100%; background: #fffef5; border: 1px solid #e9dbbc; border-radius: 10px; padding: 6px 8px; font-family: inherit; font-size: 0.75rem; }
+        .param-row { display: flex; gap: 10px; margin-bottom: 12px; }
+        .memory-status { background: #e8dcc8; border-radius: 12px; padding: 8px; margin: 10px 0; font-size: 0.7rem; }
+        .summary-box { background: #fff7e8; border-radius: 12px; padding: 10px; margin-top: 8px; border-left: 3px solid #b48c48; max-height: 140px; overflow-y: auto; font-size: 0.7rem; }
+        button.small-btn { background: #c2a16b; border: none; color: white; font-size: 0.7rem; padding: 5px 8px; border-radius: 20px; cursor: pointer; width: 100%; margin-top: 6px; }
+        h4 { color: #7a4b2c; margin-bottom: 8px; font-size: 0.85rem; border-left: 3px solid #bc8f5a; padding-left: 8px; }
+        .char-actions { display: flex; gap: 8px; margin-top: 10px; }
+        .char-actions button { flex: 1; font-size: 0.65rem; background: #d4c0a0; border: none; padding: 4px; border-radius: 20px; cursor: pointer; }
+
+        .message-card { margin-bottom: 16px; position: relative; }
+        .user-letter { display: flex; justify-content: flex-end; }
+        .ai-letter { display: flex; justify-content: flex-start; }
+        .letter-paper { max-width: 85%; padding: 8px 12px; border-radius: 12px; position: relative; background: #fff6e8; border: 1px solid #ecd9b4; }
+        .stamp { display: inline-block; width: 24px; height: 24px; background: #dbbc87; border-radius: 50%; text-align: center; line-height: 24px; font-size: 10px; margin-right: 6px; float: left; }
+        .user-letter .stamp { float: right; margin-left: 6px; margin-right: 0; }
+        .signature { margin-top: 4px; font-size: 0.6rem; text-align: right; color: #b68b5a; border-top: 1px dotted #e2cbaa; padding-top: 3px; }
+        .timestamp { font-size: 0.5rem; color: #b99e7c; margin-top: 3px; text-align: right; }
+        .message-actions { position: absolute; bottom: -18px; right: 0; display: flex; gap: 6px; opacity: 0; transition: opacity 0.2s; background: rgba(250,245,235,0.9); padding: 2px 6px; border-radius: 20px; }
+        .message-card:hover .message-actions { opacity: 1; }
+        .test-result { font-size: 0.65rem; margin-top: 4px; padding: 4px; border-radius: 8px; text-align: center; }
+        .test-success { background: #d4e6d4; color: #2d5a2d; }
+        .test-fail { background: #f0d6d6; color: #a33; }
+        .calendar-panel { background: #fff7e8; border-radius: 16px; padding: 10px; margin-top: 12px; border: 1px solid #ecd9b4; }
+        .typing-indicator { background: #fdf3e0; border-radius: 12px; padding: 8px 14px; display: inline-block; color: #a77948; }
+
+        .group-role-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
+        .group-role-item { display: flex; align-items: center; justify-content: space-between; background: #fffef5; border-radius: 30px; padding: 4px 12px; border: 1px solid #e6d5b8; }
+        .group-role-name { font-size: 0.75rem; }
+        .group-role-toggle { background: none; border: none; font-size: 1rem; cursor: pointer; }
+        .group-role-test { background: none; border: none; font-size: 0.9rem; cursor: pointer; margin-right: 6px; }
+        .info-note { background: #f0e6d2; border-radius: 12px; padding: 6px 10px; font-size: 0.65rem; color: #8b6b42; margin-top: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+<div class="main-container">
+    <div style="text-align:center; margin-bottom:10px;">
+        <h1 style="color:#7a4b2c; font-size:1.4rem;">锦 书 · 灵 犀 阁</h1>
+        <p style="font-size:0.6rem;">✧ 单人书信 ✧ 群芳共话 ✧</p>
+    </div>
+
+    <div class="mode-switch">
+        <button class="mode-btn active" data-mode="single">📖 单人书信</button>
+        <button class="mode-btn" data-mode="group">👥 群芳共话</button>
+    </div>
+
+    <div class="two-layout">
+        <div class="chat-section">
+            <div class="character-tabs" id="tabsContainer"></div>
+            <div class="correspondence" id="chatArea">
+                <div style="text-align:center; color:#b2894b; padding:20px;">✨ 选择一个角色，开始书信往来 ✨</div>
+            </div>
+            <div class="write-area">
+                <input type="text" id="userInput" placeholder="展信佳，写下你的话语..." autocomplete="off">
+                <button id="sendBtn">寄 信</button>
+            </div>
+        </div>
+
+        <div class="settings-section" id="settingsSection">
+            <div class="settings-header" id="settingsToggle">⚙️ 展开/收起设置面板</div>
+            <div class="settings-content">
+                <!-- 单人模式专用设置 -->
+                <div id="singleSettings">
+                    <h4>🔌 API 与模型</h4>
+                    <div class="field"><label>🔑 API Key</label><input type="password" id="apiKeyInput" placeholder="sk-..."></div>
+                    <div class="field"><label>🌐 API 地址</label><input type="text" id="apiUrlInput" value="https://api.deepseek.com/v1/chat/completions"></div>
+                    <div class="param-row"><div class="field"><label>🤖 模型</label><select id="modelSelect"><option value="deepseek-chat">DeepSeek-Chat</option><option value="deepseek-reasoner">DeepSeek-Reasoner</option><option value="custom">自定义</option></select></div><div class="field" id="customModelField" style="display:none;"><label>自定义模型名</label><input type="text" id="customModelInput"></div></div>
+                    <div style="display:flex; gap:8px;"><button id="testApiBtn" class="small-btn" style="background:#6b8c5c;">🔌 测试连接</button><button id="saveApiBtn" class="small-btn" style="background:#8b6b42;">💾 保存API设置</button></div>
+                    <div id="testResult" class="test-result" style="display:none;"></div>
+
+                    <h4 style="margin-top:12px;">🎭 破限词</h4>
+                    <div class="field"><textarea id="jailbreakPrompt" rows="2">(请严格遵守：沉浸扮演，绝不提及AI身份，保持古风书信格式)</textarea></div>
+                    <h4>📜 角色设定</h4>
+                    <div class="field"><label>🎭 AI 人设</label><textarea id="charPrompt" rows="2">你是一位温婉的古风才子，名叫「沈砚秋」...</textarea></div>
+                    <div class="field"><label>👤 USER 人设</label><textarea id="userPrompt" rows="1">你是一位喜爱诗词的江南女子...</textarea></div>
+                    <div class="field"><label>📖 世界书</label><textarea id="lorebook" rows="1">江南暮春，烟雨楼。</textarea></div>
+                    <h4>🎛️ 生成参数</h4>
+                    <div class="param-row"><div class="field"><label>🌡️ 温度</label><input type="number" id="temperature" step="0.05" value="0.85"></div><div class="field"><label>🎲 Top P</label><input type="number" id="topP" step="0.05" value="0.9"></div></div>
+                    <div class="param-row"><div class="field"><label>🔝 Top K</label><input type="number" id="topK" step="5" value="50"></div><div class="field"><label>📏 Max Tokens</label><input type="number" id="maxTokens" step="100" value="2000"></div></div>
+                    <h4>📝 字数限制</h4>
+                    <div style="display:flex; gap:10px;"><div class="field"><label>最少</label><input type="number" id="minWords" value="50"></div><div class="field"><label>最多</label><input type="number" id="maxWords" value="500"></div></div>
+                    <div class="memory-status"><div>📌 短期记忆轮数: <span id="memoryLimitDisplay">20</span> 轮</div><input type="range" id="memoryLimitSlider" min="10" max="100" value="20" step="5" style="width:100%;"></div>
+                    <h4>📅 昨日锦书</h4>
+                    <div id="dailySummaryBox" class="summary-box">🌙 暂无总结</div>
+                    <button id="generateSummaryBtn" class="small-btn">✍️ 生成昨日情书总结</button>
+                    <div class="calendar-panel"><div class="calendar-header"><div class="calendar-date-input"><input type="date" id="historyDatePicker"></div><button id="viewHistoryBtn" class="small-btn" style="width:auto; margin-top:0;">📖 查看</button></div><div id="historySummaryDisplay" class="summary-box" style="max-height:100px;">选择日期查看情书</div></div>
+                    <div class="char-actions"><button id="exportCharBtn">📤 导出此角色</button><button id="deleteCharBtn" style="background:#c98a6b;">🗑️ 删除</button></div>
+                    <div class="field"><label>📂 导入角色 (JSON/PNG)</label><input type="file" id="importCharInput" accept=".json,.png"><button id="importCharBtn" class="small-btn">📥 导入为新角色</button></div>
+                </div>
+
+                <!-- 群聊模式专用设置 -->
+                <div id="groupSettings" style="display:none;">
+                    <h4>👥 群聊成员管理</h4>
+                    <div class="group-role-list" id="groupRoleList"></div>
+                    <button id="refreshGroupRolesBtn" class="small-btn">🔄 刷新成员列表</button>
+                    <div class="memory-status"><div>📌 群聊历史保留轮数: <span id="groupMemoryLimitDisplay">30</span> 轮</div><input type="range" id="groupMemoryLimitSlider" min="10" max="100" value="30" step="5" style="width:100%;"></div>
+                    <div class="field"><label>🌐 全局API地址 (新角色默认)</label><input type="text" id="globalApiUrlGroup" value="https://api.deepseek.com/v1/chat/completions"></div>
+                    <div class="field"><label>🔑 默认API Key (新角色默认)</label><input type="password" id="globalApiKeyGroup" placeholder="sk-..."></div>
+                    <div class="info-note">💡 群聊模式下自动禁用 TopK 参数（兼容火山引擎等不支持 TopK 的 API）</div>
+                    <p style="font-size:0.6rem; margin-top:8px;">📌 每个角色可独立配置API和提示词，在单人模式下编辑角色后，群聊中会自动同步。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---------- 数据结构 ----------
+    class CharacterData {
+        constructor(id, name, charPrompt, userPrompt, lorebook, jailbreakPrompt, memoryLimit, longTermSummary, conversationHistory, dailySummaries, apiUrl, apiKey, model, temperature, topP, maxTokens, minWords, maxWords, topK) {
+            this.id = id; this.name = name; this.charPrompt = charPrompt; this.userPrompt = userPrompt; this.lorebook = lorebook;
+            this.jailbreakPrompt = jailbreakPrompt; this.memoryLimit = memoryLimit || 20; this.longTermSummary = longTermSummary || "";
+            this.conversationHistory = conversationHistory || []; this.dailySummaries = dailySummaries || [];
+            this.apiUrl = apiUrl || "https://api.deepseek.com/v1/chat/completions";
+            this.apiKey = apiKey || "";
+            this.model = model || "deepseek-chat";
+            this.temperature = temperature !== undefined ? temperature : 0.85;
+            this.topP = topP !== undefined ? topP : 0.9;
+            this.topK = topK !== undefined ? topK : 50;
+            this.maxTokens = maxTokens || 2000;
+            this.minWords = minWords !== undefined ? minWords : 50;
+            this.maxWords = maxWords !== undefined ? maxWords : 500;
+        }
+    }
+
+    let characters = [];
+    let currentCharId = null;
+    let currentMode = "single";
+    let groupMessages = [];
+    let groupMemoryLimit = 30;
+    let groupRoleIds = [];
+
+    // DOM 元素
+    const tabsContainer = document.getElementById('tabsContainer');
+    const chatArea = document.getElementById('chatArea');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const singleSettingsDiv = document.getElementById('singleSettings');
+    const groupSettingsDiv = document.getElementById('groupSettings');
+    const modeBtns = document.querySelectorAll('.mode-btn');
+    const settingsToggle = document.getElementById('settingsToggle');
+    const settingsSection = document.getElementById('settingsSection');
+
+    // 单人模式 UI 元素
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const apiUrlInput = document.getElementById('apiUrlInput');
+    const modelSelect = document.getElementById('modelSelect');
+    const customModelField = document.getElementById('customModelField');
+    const customModelInput = document.getElementById('customModelInput');
+    const testApiBtn = document.getElementById('testApiBtn');
+    const saveApiBtn = document.getElementById('saveApiBtn');
+    const testResultDiv = document.getElementById('testResult');
+    const charPromptInput = document.getElementById('charPrompt');
+    const userPromptInput = document.getElementById('userPrompt');
+    const lorebookInput = document.getElementById('lorebook');
+    const jailbreakPromptInput = document.getElementById('jailbreakPrompt');
+    const memoryLimitSlider = document.getElementById('memoryLimitSlider');
+    const memoryLimitDisplay = document.getElementById('memoryLimitDisplay');
+    const temperatureInput = document.getElementById('temperature');
+    const topPInput = document.getElementById('topP');
+    const topKInput = document.getElementById('topK');
+    const maxTokensInput = document.getElementById('maxTokens');
+    const minWordsInput = document.getElementById('minWords');
+    const maxWordsInput = document.getElementById('maxWords');
+    const dailySummaryBox = document.getElementById('dailySummaryBox');
+    const generateSummaryBtn = document.getElementById('generateSummaryBtn');
+    const historyDatePicker = document.getElementById('historyDatePicker');
+    const viewHistoryBtn = document.getElementById('viewHistoryBtn');
+    const historySummaryDisplay = document.getElementById('historySummaryDisplay');
+    const exportCharBtn = document.getElementById('exportCharBtn');
+    const deleteCharBtn = document.getElementById('deleteCharBtn');
+    const importCharInput = document.getElementById('importCharInput');
+    const importCharBtn = document.getElementById('importCharBtn');
+
+    // 群聊模式 UI 元素
+    const groupRoleListDiv = document.getElementById('groupRoleList');
+    const refreshGroupRolesBtn = document.getElementById('refreshGroupRolesBtn');
+    const groupMemoryLimitSlider = document.getElementById('groupMemoryLimitSlider');
+    const groupMemoryLimitDisplay = document.getElementById('groupMemoryLimitDisplay');
+    const globalApiUrlGroup = document.getElementById('globalApiUrlGroup');
+    const globalApiKeyGroup = document.getElementById('globalApiKeyGroup');
+
+    // ---------- 通用函数 ----------
+    function getCurrentTimestamp() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    }
+
+    function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+
+    function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 8); }
+
+    function saveAllToLocal() {
+        const charsData = characters.map(c => ({
+            id: c.id, name: c.name, charPrompt: c.charPrompt, userPrompt: c.userPrompt, lorebook: c.lorebook,
+            jailbreakPrompt: c.jailbreakPrompt, memoryLimit: c.memoryLimit, longTermSummary: c.longTermSummary,
+            conversationHistory: c.conversationHistory, dailySummaries: c.dailySummaries,
+            apiUrl: c.apiUrl, apiKey: c.apiKey, model: c.model, temperature: c.temperature, topP: c.topP, topK: c.topK,
+            maxTokens: c.maxTokens, minWords: c.minWords, maxWords: c.maxWords
+        }));
+        localStorage.setItem('characters', JSON.stringify(charsData));
+        localStorage.setItem('currentCharId', currentCharId);
+        localStorage.setItem('currentMode', currentMode);
+        localStorage.setItem('groupMessages', JSON.stringify(groupMessages));
+        localStorage.setItem('groupMemoryLimit', groupMemoryLimit);
+        localStorage.setItem('groupRoleIds', JSON.stringify(groupRoleIds));
+        localStorage.setItem('globalApiUrlGroup', globalApiUrlGroup.value);
+        localStorage.setItem('globalApiKeyGroup', globalApiKeyGroup.value);
+    }
+
+    function loadAllFromLocal() {
+        const saved = localStorage.getItem('characters');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                characters = parsed.map(c => new CharacterData(
+                    c.id, c.name, c.charPrompt || "", c.userPrompt || "", c.lorebook || "", c.jailbreakPrompt || "",
+                    c.memoryLimit, c.longTermSummary || "", c.conversationHistory || [], c.dailySummaries || [],
+                    c.apiUrl, c.apiKey, c.model, c.temperature, c.topP, c.maxTokens, c.minWords, c.maxWords, c.topK
+                ));
+            } catch(e) { characters = []; }
+        }
+        if (characters.length === 0) {
+            const defaultChar = new CharacterData(generateId(), "沈砚秋",
+                "你是一位生活在唐宋年间的文人墨客，名叫「沈砚秋」。性情温雅，出口成章，喜欢以书信体与人交谈。自称“某”或“吾”，称对方为“兄台”、“卿”或“足下”。文风半文半白，善用典故、山水意象，语带谦和。",
+                "你是一位喜爱诗词的江南女子/公子，性情温柔，善感多思。",
+                "时维暮春，江南草长。姑苏城外的烟雨楼，是文人雅集之地。",
+                "(请严格遵守：沉浸扮演，绝不提及AI身份，保持古风书信格式)", 20, "", [], [],
+                "https://api.deepseek.com/v1/chat/completions", "", "deepseek-chat", 0.85, 0.9, 2000, 50, 500, 50);
+            characters.push(defaultChar);
+        }
+        currentCharId = localStorage.getItem('currentCharId');
+        if (!currentCharId || !characters.find(c => c.id === currentCharId)) currentCharId = characters[0].id;
+        currentMode = localStorage.getItem('currentMode') || "single";
+        document.querySelector(`.mode-btn[data-mode="${currentMode}"]`).classList.add('active');
+        document.querySelector(`.mode-btn[data-mode="${currentMode === 'single' ? 'group' : 'single'}"]`).classList.remove('active');
+        if (currentMode === 'single') { singleSettingsDiv.style.display = 'block'; groupSettingsDiv.style.display = 'none'; }
+        else { singleSettingsDiv.style.display = 'none'; groupSettingsDiv.style.display = 'block'; }
+
+        const savedGroupMsg = localStorage.getItem('groupMessages');
+        if (savedGroupMsg) try { groupMessages = JSON.parse(savedGroupMsg); } catch(e) { groupMessages = []; }
+        groupMemoryLimit = parseInt(localStorage.getItem('groupMemoryLimit')) || 30;
+        groupMemoryLimitSlider.value = groupMemoryLimit;
+        groupMemoryLimitDisplay.innerText = groupMemoryLimit;
+        const savedGroupRoleIds = localStorage.getItem('groupRoleIds');
+        if (savedGroupRoleIds) try { groupRoleIds = JSON.parse(savedGroupRoleIds); } catch(e) { groupRoleIds = []; }
+        groupRoleIds = groupRoleIds.filter(id => characters.some(c => c.id === id));
+        if (groupRoleIds.length === 0 && characters.length > 0) groupRoleIds = [characters[0].id];
+
+        globalApiUrlGroup.value = localStorage.getItem('globalApiUrlGroup') || "https://api.deepseek.com/v1/chat/completions";
+        globalApiKeyGroup.value = localStorage.getItem('globalApiKeyGroup') || "";
+    }
+
+    // ---------- API 测试函数 ----------
+    async function testAPIConnection(apiUrl, apiKey, model) {
+        if (!apiKey) return { success: false, message: "❌ API Key 为空" };
+        if (!apiUrl) return { success: false, message: "❌ API 地址为空" };
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [{ role: "user", content: "回复'连接成功'，只回复这四个字。" }],
+                    max_tokens: 20,
+                    temperature: 0.1
+                })
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                return { success: false, message: `❌ HTTP ${response.status}: ${errText.slice(0, 100)}` };
+            }
+            const data = await response.json();
+            if (data.choices && data.choices[0]) {
+                return { success: true, message: `✅ 连接成功！模型 ${model} 正常响应。` };
+            } else {
+                return { success: false, message: "❌ 响应格式异常" };
+            }
+        } catch (err) {
+            return { success: false, message: `❌ 请求失败: ${err.message}` };
+        }
+    }
+
+    function showTestResult(success, message) {
+        testResultDiv.style.display = 'block';
+        testResultDiv.className = `test-result ${success ? 'test-success' : 'test-fail'}`;
+        testResultDiv.innerHTML = message;
+        setTimeout(() => {
+            testResultDiv.style.opacity = '0';
+            setTimeout(() => { testResultDiv.style.display = 'none'; testResultDiv.style.opacity = '1'; }, 1000);
+        }, 4000);
+    }
+
+    // 单人模式核心函数
+    function getCurrentChar() { return characters.find(c => c.id === currentCharId); }
+
+    function saveCurrentCharSettings() {
+        const char = getCurrentChar();
+        if (!char) return;
+        char.charPrompt = charPromptInput.value;
+        char.userPrompt = userPromptInput.value;
+        char.lorebook = lorebookInput.value;
+        char.jailbreakPrompt = jailbreakPromptInput.value;
+        char.memoryLimit = parseInt(memoryLimitSlider.value);
+        char.apiUrl = apiUrlInput.value;
+        char.apiKey = apiKeyInput.value;
+        char.model = modelSelect.value === 'custom' ? customModelInput.value : modelSelect.value;
+        char.temperature = parseFloat(temperatureInput.value);
+        char.topP = parseFloat(topPInput.value);
+        char.topK = parseInt(topKInput.value);
+        char.maxTokens = parseInt(maxTokensInput.value);
+        char.minWords = parseInt(minWordsInput.value);
+        char.maxWords = parseInt(maxWordsInput.value);
+        saveAllToLocal();
+    }
+
+    function loadCurrentCharToUI() {
+        const char = getCurrentChar();
+        if (!char) return;
+        charPromptInput.value = char.charPrompt;
+        userPromptInput.value = char.userPrompt;
+        lorebookInput.value = char.lorebook;
+        jailbreakPromptInput.value = char.jailbreakPrompt;
+        memoryLimitSlider.value = char.memoryLimit;
+        memoryLimitDisplay.innerText = char.memoryLimit;
+        apiKeyInput.value = char.apiKey;
+        apiUrlInput.value = char.apiUrl;
+        if (char.model && (char.model === 'deepseek-chat' || char.model === 'deepseek-reasoner')) modelSelect.value = char.model;
+        else { modelSelect.value = 'custom'; customModelInput.value = char.model; customModelField.style.display = 'block'; }
+        temperatureInput.value = char.temperature;
+        topPInput.value = char.topP;
+        topKInput.value = char.topK;
+        maxTokensInput.value = char.maxTokens;
+        minWordsInput.value = char.minWords;
+        maxWordsInput.value = char.maxWords;
+        dailySummaryBox.innerHTML = char.longTermSummary ? char.longTermSummary.replace(/\n/g, '<br>') : '🌙 暂无总结';
+        renderChatHistory();
+    }
+
+    function renderChatHistory() {
+        const char = getCurrentChar();
+        chatArea.innerHTML = '';
+        if (!char || !char.conversationHistory.length) { chatArea.innerHTML = '<div style="text-align:center; padding:20px;">✨ 待君寄来第一封信 ✨</div>'; return; }
+        for (let i = 0; i < char.conversationHistory.length; i++) {
+            const msg = char.conversationHistory[i];
+            if (msg.role === 'user' || msg.role === 'assistant') addMessageToUI(msg.content, msg.role, msg.timestamp, i);
+        }
+    }
+
+    function addMessageToUI(content, role, timestamp, index) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message-card ${role === 'user' ? 'user-letter' : 'ai-letter'}`;
+        const paper = document.createElement('div'); paper.className = 'letter-paper';
+        const stamp = document.createElement('span'); stamp.className = 'stamp'; stamp.textContent = role === 'user' ? '寄' : '复';
+        const contentSpan = document.createElement('div'); contentSpan.style.whiteSpace = 'pre-wrap'; contentSpan.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+        const sig = document.createElement('div'); sig.className = 'signature'; sig.textContent = role === 'user' ? '—— 某 顿首' : `—— ${getCurrentChar()?.name || '卿'} 谨复`;
+        const timeSpan = document.createElement('div'); timeSpan.className = 'timestamp'; timeSpan.textContent = timestamp || '时间不详';
+        const actions = document.createElement('div'); actions.className = 'message-actions';
+        if (role === 'user') {
+            const editBtn = document.createElement('button'); editBtn.textContent = '✏️ 编辑';
+            editBtn.onclick = () => editUserMessage(index);
+            actions.appendChild(editBtn);
+        } else {
+            const regenBtn = document.createElement('button'); regenBtn.textContent = '🔄 重新生成';
+            regenBtn.onclick = () => regenerateAIResponse(index);
+            actions.appendChild(regenBtn);
+        }
+        paper.appendChild(stamp); paper.appendChild(contentSpan); paper.appendChild(sig); paper.appendChild(timeSpan); paper.appendChild(actions);
+        messageDiv.appendChild(paper); chatArea.appendChild(messageDiv); chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    async function editUserMessage(msgIndex) {
+        const char = getCurrentChar(); if (!char) return;
+        const oldMsg = char.conversationHistory[msgIndex]; if (!oldMsg || oldMsg.role !== 'user') return;
+        const newText = prompt("编辑你的消息：", oldMsg.content); if (!newText || newText === oldMsg.content) return;
+        char.conversationHistory = char.conversationHistory.slice(0, msgIndex);
+        char.conversationHistory.push({ role: "user", content: newText, timestamp: getCurrentTimestamp() });
+        saveAllToLocal(); renderChatHistory();
+        showTyping();
+        const reply = await callSingleAI(newText);
+        hideTyping();
+        if (reply) { char.conversationHistory.push({ role: "assistant", content: reply, timestamp: getCurrentTimestamp() }); saveAllToLocal(); renderChatHistory(); }
+    }
+
+    async function regenerateAIResponse(msgIndex) {
+        const char = getCurrentChar(); if (!char) return;
+        const msg = char.conversationHistory[msgIndex]; if (!msg || msg.role !== 'assistant') return;
+        let userMsgIndex = msgIndex-1; while(userMsgIndex>=0 && char.conversationHistory[userMsgIndex].role !== 'user') userMsgIndex--;
+        if (userMsgIndex < 0) { alert("找不到对应消息"); return; }
+        const userMsg = char.conversationHistory[userMsgIndex];
+        char.conversationHistory = char.conversationHistory.slice(0, msgIndex);
+        saveAllToLocal(); renderChatHistory();
+        showTyping();
+        const reply = await callSingleAI(userMsg.content);
+        hideTyping();
+        if (reply) { char.conversationHistory.push({ role: "assistant", content: reply, timestamp: getCurrentTimestamp() }); saveAllToLocal(); renderChatHistory(); }
+    }
+
+    async function callSingleAI(userMessage) {
+        const char = getCurrentChar();
+        if (!char) return null;
+        if (!char.apiKey) { alert("请填写API Key"); return "【无API Key】"; }
+        const systemPrompt = buildSystemPrompt(char);
+        const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
+        const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
+        // 单人模式：如果 topK > 0 则添加（用户可自行决定是否开启）
+        if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
+        try {
+            const resp = await fetch(char.apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
+            if (!resp.ok) throw new Error(await resp.text());
+            const data = await resp.json();
+            let reply = data.choices[0].message.content;
+            const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
+            return finalMatch ? finalMatch[1].trim() : reply;
+        } catch(err) { console.error(err); return "【信差迷途】" + err.message; }
+    }
+
+    function buildSystemPrompt(char) {
+        let parts = [];
+        if (char.jailbreakPrompt) parts.push(char.jailbreakPrompt);
+        let roleSection = `【角色设定】\n${char.charPrompt}`;
+        if (char.userPrompt) roleSection += `\n\n【对方人设】\n${char.userPrompt}`;
+        if (char.lorebook) roleSection += `\n\n【世界背景】\n${char.lorebook}`;
+        parts.push(roleSection);
+        if (char.longTermSummary && char.longTermSummary !== "暂无总结") parts.push(`【长情记忆】\n${char.longTermSummary}`);
+        parts.push(`【字数限制】请控制回复在 ${char.minWords}-${char.maxWords} 字之间。输出格式：\n【思考过程】\n【最终回复】`);
+        parts.push(`【当前时间】${new Date().toLocaleString()}`);
+        return parts.join('\n\n---\n\n');
+    }
+
+    let typingDiv = null;
+    function showTyping() { if(typingDiv) typingDiv.remove(); typingDiv = document.createElement('div'); typingDiv.className = 'message-card ai-letter'; typingDiv.innerHTML = `<div class="letter-paper"><div class="typing-indicator">✍️ 研墨中...</div></div>`; chatArea.appendChild(typingDiv); chatArea.scrollTop = chatArea.scrollHeight; }
+    function hideTyping() { if(typingDiv) { typingDiv.remove(); typingDiv = null; } }
+
+    async function handleSingleSend() {
+        const text = userInput.value.trim();
+        if (!text) return;
+        userInput.value = '';
+        const char = getCurrentChar();
+        char.conversationHistory.push({ role: "user", content: text, timestamp: getCurrentTimestamp() });
+        while(char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift();
+        saveAllToLocal(); renderChatHistory();
+        showTyping();
+        const reply = await callSingleAI(text);
+        hideTyping();
+        if (reply) { char.conversationHistory.push({ role: "assistant", content: reply, timestamp: getCurrentTimestamp() }); while(char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift(); saveAllToLocal(); renderChatHistory(); }
+    }
+
+    // 群聊模式函数
+    function renderGroupMessages() {
+        chatArea.innerHTML = '';
+        if (groupMessages.length === 0) { chatArea.innerHTML = '<div style="text-align:center; padding:20px;">✨ 群聊尚未开始，发送消息吧 ✨</div>'; return; }
+        for (const msg of groupMessages) {
+            const isUser = msg.isUser;
+            const div = document.createElement('div');
+            div.className = `message-card ${isUser ? 'user-letter' : 'ai-letter'}`;
+            const paper = document.createElement('div'); paper.className = 'letter-paper';
+            const stamp = document.createElement('span'); stamp.className = 'stamp'; stamp.textContent = isUser ? '寄' : '复';
+            const nameSpan = document.createElement('div'); nameSpan.style.fontSize = '0.7rem'; nameSpan.style.fontWeight = 'bold'; nameSpan.style.marginBottom = '4px'; nameSpan.textContent = msg.sender;
+            const contentSpan = document.createElement('div'); contentSpan.style.whiteSpace = 'pre-wrap'; contentSpan.innerHTML = escapeHtml(msg.content).replace(/\n/g, '<br>');
+            const timeSpan = document.createElement('div'); timeSpan.className = 'timestamp'; timeSpan.textContent = msg.timestamp || '';
+            paper.appendChild(stamp); paper.appendChild(nameSpan); paper.appendChild(contentSpan); paper.appendChild(timeSpan);
+            div.appendChild(paper); chatArea.appendChild(div);
+        }
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    async function callGroupAI(role, history) {
+        if (!role.apiKey) { console.warn(role.name, "无API Key"); return null; }
+        const systemPrompt = role.jailbreakPrompt + "\n【角色设定】\n" + role.charPrompt + (role.lorebook ? "\n【世界】"+role.lorebook : "") + (role.longTermSummary ? "\n【记忆】"+role.longTermSummary : "");
+        const apiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.isUser ? "user" : "assistant", content: m.content }))];
+        const requestBody = { model: role.model, messages: apiMessages, max_tokens: role.maxTokens, temperature: role.temperature, top_p: role.topP };
+        // 群聊模式：强制不发送 top_k 参数（兼容不支持该参数的 API）
+        // 注意：不添加 top_k 字段
+        try {
+            const resp = await fetch(role.apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${role.apiKey}` }, body: JSON.stringify(requestBody) });
+            if (!resp.ok) throw new Error(await resp.text());
+            const data = await resp.json();
+            let reply = data.choices[0].message.content;
+            const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
+            return finalMatch ? finalMatch[1].trim() : reply;
+        } catch(err) { console.error(err); return `【调用失败】${err.message}`; }
+    }
+
+    async function handleGroupSend() {
+        const text = userInput.value.trim();
+        if (!text) return;
+        userInput.value = '';
+        groupMessages.push({ sender: "我", content: text, timestamp: getCurrentTimestamp(), isUser: true });
+        while(groupMessages.length > groupMemoryLimit) groupMessages.shift();
+        saveAllToLocal(); renderGroupMessages();
+
+        const activeRoles = characters.filter(c => groupRoleIds.includes(c.id));
+        for (const role of activeRoles) {
+            const indicatorId = `typing-${role.id}`;
+            const indicatorDiv = document.createElement('div'); indicatorDiv.id = indicatorId; indicatorDiv.className = 'message-card ai-letter'; indicatorDiv.innerHTML = `<div class="letter-paper"><div class="typing-indicator">${role.name} 正在挥毫...</div></div>`;
+            chatArea.appendChild(indicatorDiv); chatArea.scrollTop = chatArea.scrollHeight;
+            const reply = await callGroupAI(role, groupMessages);
+            document.getElementById(indicatorId)?.remove();
+            if (reply) {
+                groupMessages.push({ sender: role.name, content: reply, timestamp: getCurrentTimestamp(), isUser: false });
+                while(groupMessages.length > groupMemoryLimit) groupMessages.shift();
+                saveAllToLocal(); renderGroupMessages();
+            }
+            await new Promise(r => setTimeout(r, 800));
+        }
+    }
+
+    function renderGroupRoleList() {
+        groupRoleListDiv.innerHTML = '';
+        characters.forEach(char => {
+            const isChecked = groupRoleIds.includes(char.id);
+            const item = document.createElement('div'); item.className = 'group-role-item';
+            item.innerHTML = `
+                <span class="group-role-name">${escapeHtml(char.name)}</span>
+                <div style="display:flex; gap:6px;">
+                    <button class="group-role-test" data-id="${char.id}" style="background:none; border:none; cursor:pointer;" title="测试API">🔌</button>
+                    <button class="group-role-toggle" data-id="${char.id}">${isChecked ? '✅' : '➕'}</button>
+                </div>
+            `;
+            groupRoleListDiv.appendChild(item);
+        });
+        document.querySelectorAll('.group-role-test').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const id = btn.dataset.id;
+                const role = characters.find(c => c.id === id);
+                if (!role) return;
+                const result = await testAPIConnection(role.apiUrl, role.apiKey, role.model);
+                alert(result.message);
+            });
+        });
+        document.querySelectorAll('.group-role-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = btn.dataset.id;
+                if (groupRoleIds.includes(id)) groupRoleIds = groupRoleIds.filter(i => i !== id);
+                else groupRoleIds.push(id);
+                saveAllToLocal();
+                renderGroupRoleList();
+            });
+        });
+    }
+
+    function switchMode(mode) {
+        currentMode = mode;
+        saveAllToLocal();
+        if (mode === 'single') {
+            singleSettingsDiv.style.display = 'block';
+            groupSettingsDiv.style.display = 'none';
+            loadCurrentCharToUI();
+        } else {
+            singleSettingsDiv.style.display = 'none';
+            groupSettingsDiv.style.display = 'block';
+            renderGroupMessages();
+            renderGroupRoleList();
+        }
+    }
+
+    function renderTabs() {
+        tabsContainer.innerHTML = '';
+        characters.forEach(char => {
+            const btn = document.createElement('button'); btn.className = `char-tab ${char.id === currentCharId ? 'active' : ''}`; btn.textContent = char.name;
+            btn.onclick = () => { if(currentMode === 'single') { saveCurrentCharSettings(); currentCharId = char.id; renderTabs(); loadCurrentCharToUI(); saveAllToLocal(); } else alert("群聊模式下请切换回单人模式编辑角色"); };
+            tabsContainer.appendChild(btn);
+        });
+        const addBtn = document.createElement('button'); addBtn.className = 'add-char-btn'; addBtn.textContent = '+ 新建角色';
+        addBtn.onclick = () => {
+            const name = prompt("角色名");
+            if(name){
+                const newChar = new CharacterData(
+                    generateId(), name, "", "", "", "", 20, "", [], [],
+                    globalApiUrlGroup.value,
+                    globalApiKeyGroup.value,
+                    "deepseek-chat", 0.85, 0.9, 2000, 50, 500, 50
+                );
+                characters.push(newChar);
+                currentCharId = newChar.id;
+                renderTabs();
+                if(currentMode === 'single') loadCurrentCharToUI();
+                saveAllToLocal();
+                if(currentMode === 'group') renderGroupRoleList();
+            }
+        };
+        tabsContainer.appendChild(addBtn);
+    }
+
+    // 事件绑定
+    sendBtn.addEventListener('click', () => { if (currentMode === 'single') handleSingleSend(); else handleGroupSend(); });
+    userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendBtn.click(); });
+    modeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            modeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            switchMode(btn.dataset.mode);
+        });
+    });
+    settingsToggle.addEventListener('click', () => settingsSection.classList.toggle('collapsed'));
+    refreshGroupRolesBtn.addEventListener('click', () => renderGroupRoleList());
+    groupMemoryLimitSlider.addEventListener('input', () => { groupMemoryLimit = parseInt(groupMemoryLimitSlider.value); groupMemoryLimitDisplay.innerText = groupMemoryLimit; saveAllToLocal(); });
+    saveApiBtn.addEventListener('click', () => { saveCurrentCharSettings(); alert("已保存"); });
+    testApiBtn.addEventListener('click', async () => {
+        const char = getCurrentChar();
+        if (!char) return;
+        const result = await testAPIConnection(char.apiUrl, char.apiKey, char.model);
+        showTestResult(result.success, result.message);
+    });
+    modelSelect.addEventListener('change', () => { customModelField.style.display = modelSelect.value === 'custom' ? 'block' : 'none'; });
+    exportCharBtn.addEventListener('click', () => {
+        const char = getCurrentChar();
+        if(char){
+            const data = JSON.stringify({...char});
+            const blob = new Blob([data],{type:'application/json'});
+            const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`角色_${char.name}.json`; a.click(); URL.revokeObjectURL(a.href);
+        }
+    });
+    deleteCharBtn.addEventListener('click', () => {
+        if (characters.length <= 1) { alert("至少保留一个角色"); return; }
+        if (!confirm(`删除角色「${getCurrentChar().name}」？`)) return;
+        const idx = characters.findIndex(c => c.id === currentCharId);
+        characters.splice(idx,1);
+        currentCharId = characters[0].id;
+        saveAllToLocal();
+        renderTabs();
+        if(currentMode === 'single') loadCurrentCharToUI();
+        if(currentMode === 'group') renderGroupRoleList();
+    });
+    importCharBtn.addEventListener('click', () => {
+        if(!importCharInput.files.length) { alert("请选择文件"); return; }
+        const file = importCharInput.files[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                const newChar = new CharacterData(
+                    generateId(), data.name || "导入角色", data.charPrompt || "", data.userPrompt || "", data.lorebook || "", data.jailbreakPrompt || "",
+                    data.memoryLimit, data.longTermSummary || "", data.conversationHistory || [], data.dailySummaries || [],
+                    data.apiUrl, data.apiKey, data.model, data.temperature, data.topP, data.maxTokens, data.minWords, data.maxWords, data.topK
+                );
+                characters.push(newChar);
+                currentCharId = newChar.id;
+                saveAllToLocal();
+                renderTabs();
+                if(currentMode === 'single') loadCurrentCharToUI();
+                if(currentMode === 'group') renderGroupRoleList();
+                alert(`导入角色「${newChar.name}」成功`);
+            } catch(err) { alert("解析失败: "+err.message); }
+        };
+        reader.readAsText(file);
+    });
+    generateSummaryBtn.addEventListener('click', () => alert("每日总结功能可后续完善"));
+    viewHistoryBtn.addEventListener('click', () => { const date = historyDatePicker.value; if(date) historySummaryDisplay.innerHTML = "演示：查看历史情书功能可后续完善"; });
+    [temperatureInput, topPInput, topKInput, maxTokensInput, minWordsInput, maxWordsInput].forEach(inp => inp.addEventListener('change', () => saveCurrentCharSettings()));
+    charPromptInput.addEventListener('change', () => saveCurrentCharSettings());
+    userPromptInput.addEventListener('change', () => saveCurrentCharSettings());
+    lorebookInput.addEventListener('change', () => saveCurrentCharSettings());
+    jailbreakPromptInput.addEventListener('change', () => saveCurrentCharSettings());
+    memoryLimitSlider.addEventListener('input', () => { memoryLimitDisplay.innerText = memoryLimitSlider.value; saveCurrentCharSettings(); });
+    apiKeyInput.addEventListener('change', () => saveCurrentCharSettings());
+    apiUrlInput.addEventListener('change', () => saveCurrentCharSettings());
+    customModelInput.addEventListener('change', () => saveCurrentCharSettings());
+
+    loadAllFromLocal();
+    renderTabs();
+    if (currentMode === 'single') loadCurrentCharToUI();
+    else { renderGroupMessages(); renderGroupRoleList(); }
+</script>
+</body>
+</html>
