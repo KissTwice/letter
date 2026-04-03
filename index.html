@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <title>锦书·灵犀阁 | 角色扮演+群聊</title>
     <style>
-        /* 样式保持不变，此处省略以节省篇幅，请从之前版本复制完整样式 */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { background: #c4aa7b; min-height: 100vh; padding: 16px; font-family: '华文楷书', '楷体', 'Microsoft YaHei', serif; }
         .main-container { max-width: 1400px; margin: 0 auto; background: #fef7e8; border-radius: 4px 20px 20px 20px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.4); padding: 16px 20px 20px; position: relative; }
@@ -89,7 +88,19 @@
                 <div id="singleSettings">
                     <h4>🔌 API 与模型</h4>
                     <div class="field"><label>🔑 API Key</label><input type="password" id="apiKeyInput" placeholder="sk-..."></div>
-                    <div class="field"><label>🌐 API 地址</label><input type="text" id="apiUrlInput" value="https://api.deepseek.com/v1/chat/completions"></div>
+                    <div class="field"><label>🌐 API 预设</label>
+                        <select id="apiPresetSelect">
+                            <option value="">-- 自定义 --</option>
+                            <option value="deepseek">DeepSeek</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="claude">Anthropic Claude</option>
+                            <option value="openai-compatible">兼容 OpenAI</option>
+                        </select>
+                    </div>
+                    <div class="param-row">
+                        <div class="field"><label>API 主机</label><input type="text" id="apiHostInput" value="https://api.deepseek.com"></div>
+                        <div class="field"><label>API 路径</label><input type="text" id="apiPathInput" value="/v1/chat/completions"></div>
+                    </div>
                     <div class="param-row"><div class="field"><label>🤖 模型</label><select id="modelSelect"><option value="deepseek-chat">DeepSeek-Chat</option><option value="deepseek-reasoner">DeepSeek-Reasoner</option><option value="custom">自定义</option></select></div><div class="field" id="customModelField" style="display:none;"><label>自定义模型名</label><input type="text" id="customModelInput"></div></div>
                     <div class="field"><label>🔄 CORS 代理地址（可选）</label><input type="text" id="corsProxy" value="https://cors-proxy.kisstwice.workers.dev/?url=" placeholder="例如: https://cors-proxy.xxxx.workers.dev/?url="><div style="font-size:0.6rem; color:#9b7b54;">如果遇到CORS错误，请填写代理地址（末尾需带?url=）</div></div>
                     <div style="display:flex; gap:8px;"><button id="testApiBtn" class="small-btn" style="background:#6b8c5c;">🔌 测试连接</button><button id="saveApiBtn" class="small-btn" style="background:#8b6b42;">💾 保存API设置</button></div>
@@ -133,11 +144,12 @@
 <script>
     // ---------- 数据结构 ----------
     class CharacterData {
-        constructor(id, name, charPrompt, userPrompt, lorebook, jailbreakPrompt, memoryLimit, longTermSummary, conversationHistory, dailySummaries, apiUrl, apiKey, model, temperature, topP, maxTokens, minWords, maxWords, topK) {
+        constructor(id, name, charPrompt, userPrompt, lorebook, jailbreakPrompt, memoryLimit, longTermSummary, conversationHistory, dailySummaries, apiHost, apiPath, apiKey, model, temperature, topP, maxTokens, minWords, maxWords, topK) {
             this.id = id; this.name = name; this.charPrompt = charPrompt; this.userPrompt = userPrompt; this.lorebook = lorebook;
             this.jailbreakPrompt = jailbreakPrompt; this.memoryLimit = memoryLimit || 20; this.longTermSummary = longTermSummary || "";
             this.conversationHistory = conversationHistory || []; this.dailySummaries = dailySummaries || [];
-            this.apiUrl = apiUrl || "https://api.deepseek.com/v1/chat/completions";
+            this.apiHost = apiHost || "https://api.deepseek.com";
+            this.apiPath = apiPath || "/v1/chat/completions";
             this.apiKey = apiKey || "";
             this.model = model || "deepseek-chat";
             this.temperature = temperature !== undefined ? temperature : 0.85;
@@ -146,6 +158,9 @@
             this.maxTokens = maxTokens || 2000;
             this.minWords = minWords !== undefined ? minWords : 50;
             this.maxWords = maxWords !== undefined ? maxWords : 500;
+        }
+        getApiUrl() {
+            return this.apiHost + this.apiPath;
         }
     }
 
@@ -169,7 +184,9 @@
 
     // 单人模式 UI 元素
     const apiKeyInput = document.getElementById('apiKeyInput');
-    const apiUrlInput = document.getElementById('apiUrlInput');
+    const apiPresetSelect = document.getElementById('apiPresetSelect');
+    const apiHostInput = document.getElementById('apiHostInput');
+    const apiPathInput = document.getElementById('apiPathInput');
     const modelSelect = document.getElementById('modelSelect');
     const customModelField = document.getElementById('customModelField');
     const customModelInput = document.getElementById('customModelInput');
@@ -207,6 +224,33 @@
     const globalApiUrlGroup = document.getElementById('globalApiUrlGroup');
     const globalApiKeyGroup = document.getElementById('globalApiKeyGroup');
 
+    // API 预设配置
+    const apiPresets = {
+        deepseek: { host: 'https://api.deepseek.com', path: '/v1/chat/completions', model: 'deepseek-chat', modelType: 'preset' },
+        gemini: { host: 'https://generativelanguage.googleapis.com', path: '/v1beta/models/gemini-2.0-flash:generateContent', model: 'gemini-2.0-flash', modelType: 'custom' },
+        claude: { host: 'https://api.anthropic.com', path: '/v1/messages', model: 'claude-3-sonnet-20240229', modelType: 'custom' },
+        'openai-compatible': { host: 'https://api.openai.com', path: '/v1/chat/completions', model: 'gpt-3.5-turbo', modelType: 'custom' }
+    };
+
+    function applyApiPreset(presetKey) {
+        const preset = apiPresets[presetKey];
+        if (!preset) return;
+        apiHostInput.value = preset.host;
+        apiPathInput.value = preset.path;
+        if (preset.modelType === 'preset') {
+            modelSelect.value = preset.model;
+            customModelField.style.display = 'none';
+        } else {
+            modelSelect.value = 'custom';
+            customModelInput.value = preset.model;
+            customModelField.style.display = 'block';
+        }
+    }
+
+    apiPresetSelect.addEventListener('change', () => {
+        if (apiPresetSelect.value) applyApiPreset(apiPresetSelect.value);
+    });
+
     // 辅助函数
     function getCurrentTimestamp() {
         const now = new Date();
@@ -222,7 +266,7 @@
             id: c.id, name: c.name, charPrompt: c.charPrompt, userPrompt: c.userPrompt, lorebook: c.lorebook,
             jailbreakPrompt: c.jailbreakPrompt, memoryLimit: c.memoryLimit, longTermSummary: c.longTermSummary,
             conversationHistory: c.conversationHistory, dailySummaries: c.dailySummaries,
-            apiUrl: c.apiUrl, apiKey: c.apiKey, model: c.model, temperature: c.temperature, topP: c.topP, topK: c.topK,
+            apiHost: c.apiHost, apiPath: c.apiPath, apiKey: c.apiKey, model: c.model, temperature: c.temperature, topP: c.topP, topK: c.topK,
             maxTokens: c.maxTokens, minWords: c.minWords, maxWords: c.maxWords
         }));
         localStorage.setItem('characters', JSON.stringify(charsData));
@@ -233,7 +277,6 @@
         localStorage.setItem('groupRoleIds', JSON.stringify(groupRoleIds));
         localStorage.setItem('globalApiUrlGroup', globalApiUrlGroup.value);
         localStorage.setItem('globalApiKeyGroup', globalApiKeyGroup.value);
-        // 保存代理地址
         localStorage.setItem('corsProxy', corsProxyInput.value);
     }
 
@@ -242,11 +285,24 @@
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
-                characters = parsed.map(c => new CharacterData(
-                    c.id, c.name, c.charPrompt || "", c.userPrompt || "", c.lorebook || "", c.jailbreakPrompt || "",
-                    c.memoryLimit, c.longTermSummary || "", c.conversationHistory || [], c.dailySummaries || [],
-                    c.apiUrl, c.apiKey, c.model, c.temperature, c.topP, c.maxTokens, c.minWords, c.maxWords, c.topK
-                ));
+                characters = parsed.map(c => {
+                    let apiHost = c.apiHost, apiPath = c.apiPath;
+                    if (!apiHost && c.apiUrl) {
+                        try {
+                            const url = new URL(c.apiUrl);
+                            apiHost = url.origin;
+                            apiPath = url.pathname + url.search;
+                        } catch(e) {
+                            apiHost = "https://api.deepseek.com";
+                            apiPath = "/v1/chat/completions";
+                        }
+                    }
+                    return new CharacterData(
+                        c.id, c.name, c.charPrompt || "", c.userPrompt || "", c.lorebook || "", c.jailbreakPrompt || "",
+                        c.memoryLimit, c.longTermSummary || "", c.conversationHistory || [], c.dailySummaries || [],
+                        apiHost, apiPath, c.apiKey || "", c.model, c.temperature, c.topP, c.maxTokens, c.minWords, c.maxWords, c.topK
+                    );
+                });
             } catch(e) { characters = []; }
         }
         if (characters.length === 0) {
@@ -255,7 +311,7 @@
                 "你是一位喜爱诗词的江南女子/公子，性情温柔，善感多思。",
                 "时维暮春，江南草长。姑苏城外的烟雨楼，是文人雅集之地。",
                 "(请严格遵守：沉浸扮演，绝不提及AI身份，保持古风书信格式)", 20, "", [], [],
-                "https://api.deepseek.com/v1/chat/completions", "", "deepseek-chat", 0.85, 0.9, 2000, 50, 500, 50);
+                "https://api.deepseek.com", "/v1/chat/completions", "", "deepseek-chat", 0.85, 0.9, 2000, 50, 500, 50);
             characters.push(defaultChar);
         }
         currentCharId = localStorage.getItem('currentCharId');
@@ -282,36 +338,26 @@
         if (savedProxy) corsProxyInput.value = savedProxy;
     }
 
-    // ---------- API 测试函数（支持代理） ----------
+    // API 测试函数（支持代理）
     async function testAPIConnection(apiUrl, apiKey, model) {
         if (!apiKey) return { success: false, message: "❌ API Key 为空" };
         if (!apiUrl) return { success: false, message: "❌ API 地址为空" };
         let finalUrl = apiUrl;
         const proxyBase = corsProxyInput.value.trim();
-        if (proxyBase) {
-            finalUrl = proxyBase + '?url=' + encodeURIComponent(apiUrl);
-        }
+        if (proxyBase) finalUrl = proxyBase + '?url=' + encodeURIComponent(apiUrl);
         try {
             const response = await fetch(finalUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [{ role: "user", content: "回复'连接成功'，只回复这四个字。" }],
-                    max_tokens: 20,
-                    temperature: 0.1
-                })
+                body: JSON.stringify({ model, messages: [{ role: "user", content: "回复'连接成功'，只回复这四个字。" }], max_tokens: 20, temperature: 0.1 })
             });
             if (!response.ok) {
                 const errText = await response.text();
                 return { success: false, message: `❌ HTTP ${response.status}: ${errText.slice(0, 100)}` };
             }
             const data = await response.json();
-            if (data.choices && data.choices[0]) {
-                return { success: true, message: `✅ 连接成功！模型 ${model} 正常响应。` };
-            } else {
-                return { success: false, message: "❌ 响应格式异常" };
-            }
+            if (data.choices && data.choices[0]) return { success: true, message: `✅ 连接成功！模型 ${model} 正常响应。` };
+            else return { success: false, message: "❌ 响应格式异常" };
         } catch (err) {
             return { success: false, message: `❌ 请求失败: ${err.message}` };
         }
@@ -338,7 +384,8 @@
         char.lorebook = lorebookInput.value;
         char.jailbreakPrompt = jailbreakPromptInput.value;
         char.memoryLimit = parseInt(memoryLimitSlider.value);
-        char.apiUrl = apiUrlInput.value;
+        char.apiHost = apiHostInput.value;
+        char.apiPath = apiPathInput.value;
         char.apiKey = apiKeyInput.value;
         char.model = modelSelect.value === 'custom' ? customModelInput.value : modelSelect.value;
         char.temperature = parseFloat(temperatureInput.value);
@@ -360,7 +407,8 @@
         memoryLimitSlider.value = char.memoryLimit;
         memoryLimitDisplay.innerText = char.memoryLimit;
         apiKeyInput.value = char.apiKey;
-        apiUrlInput.value = char.apiUrl;
+        apiHostInput.value = char.apiHost;
+        apiPathInput.value = char.apiPath;
         if (char.model && (char.model === 'deepseek-chat' || char.model === 'deepseek-reasoner')) modelSelect.value = char.model;
         else { modelSelect.value = 'custom'; customModelInput.value = char.model; customModelField.style.display = 'block'; }
         temperatureInput.value = char.temperature;
@@ -371,6 +419,17 @@
         maxWordsInput.value = char.maxWords;
         dailySummaryBox.innerHTML = char.longTermSummary ? char.longTermSummary.replace(/\n/g, '<br>') : '🌙 暂无总结';
         renderChatHistory();
+        // 同步预设下拉框
+        const currentHost = apiHostInput.value, currentPath = apiPathInput.value;
+        let matched = false;
+        for (const [key, preset] of Object.entries(apiPresets)) {
+            if (preset.host === currentHost && preset.path === currentPath) {
+                apiPresetSelect.value = key;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) apiPresetSelect.value = "";
     }
 
     function renderChatHistory() {
@@ -391,16 +450,8 @@
         const contentSpan = document.createElement('div'); contentSpan.style.whiteSpace = 'pre-wrap'; contentSpan.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
         const sig = document.createElement('div'); sig.className = 'signature'; sig.textContent = role === 'user' ? '—— 某 顿首' : `—— ${getCurrentChar()?.name || '卿'} 谨复`;
         const timeSpan = document.createElement('div'); timeSpan.className = 'timestamp'; timeSpan.textContent = timestamp || '时间不详';
-	 // 新增 token 显示
-    const tokenSpan = document.createElement('div');
-    tokenSpan.className = 'timestamp';
-    tokenSpan.style.fontSize = '0.5rem';
-    tokenSpan.style.color = '#b99e7c';
-    if (usage && usage.total_tokens) {
-        tokenSpan.textContent = `🔢 ${usage.total_tokens} tokens`;
-    } else {
-        tokenSpan.textContent = '';
-    }
+        const tokenSpan = document.createElement('div'); tokenSpan.className = 'timestamp'; tokenSpan.style.fontSize = '0.5rem'; tokenSpan.style.color = '#b99e7c';
+        if (usage && usage.total_tokens) tokenSpan.textContent = `🔢 ${usage.total_tokens} tokens`; else tokenSpan.textContent = '';
         const actions = document.createElement('div'); actions.className = 'message-actions';
         if (role === 'user') {
             const editBtn = document.createElement('button'); editBtn.textContent = '✏️ 编辑';
@@ -411,7 +462,7 @@
             regenBtn.onclick = () => regenerateAIResponse(index);
             actions.appendChild(regenBtn);
         }
-	paper.appendChild(stamp); paper.appendChild(contentSpan); paper.appendChild(sig); paper.appendChild(timeSpan);paper.appendChild(tokenSpan);paper.appendChild(actions);
+        paper.appendChild(stamp); paper.appendChild(contentSpan); paper.appendChild(sig); paper.appendChild(timeSpan); paper.appendChild(tokenSpan); paper.appendChild(actions);
         messageDiv.appendChild(paper); chatArea.appendChild(messageDiv); chatArea.scrollTop = chatArea.scrollHeight;
     }
 
@@ -424,12 +475,12 @@
         saveAllToLocal(); renderChatHistory();
         showTyping();
         const result = await callSingleAI(newText);
-	hideTyping();
-	if (result && result.reply) {
-   		char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
-    		saveAllToLocal();
-    		addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
-}
+        hideTyping();
+        if (result && result.reply) {
+            char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
+            saveAllToLocal();
+            addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
+        }
     }
 
     async function regenerateAIResponse(msgIndex) {
@@ -442,41 +493,39 @@
         saveAllToLocal(); renderChatHistory();
         showTyping();
         const result = await callSingleAI(userMsg.content);
-	hideTyping();
-	if (result && result.reply) {
-    	char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
-   	saveAllToLocal();
-    	addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
-}
+        hideTyping();
+        if (result && result.reply) {
+            char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
+            saveAllToLocal();
+            addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
+        }
     }
 
     async function callSingleAI(userMessage) {
-    const char = getCurrentChar();
-    if (!char) return { reply: null, usage: null };
-    if (!char.apiKey) { alert("请填写API Key"); return { reply: "【无API Key】", usage: null }; }
-    const systemPrompt = buildSystemPrompt(char);
-    const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
-    let finalUrl = char.apiUrl;
-    const proxyBase = corsProxyInput.value.trim();
-    if (proxyBase) {
-        finalUrl = proxyBase + '?url=' + encodeURIComponent(char.apiUrl);
+        const char = getCurrentChar();
+        if (!char) return { reply: null, usage: null };
+        if (!char.apiKey) { alert("请填写API Key"); return { reply: "【无API Key】", usage: null }; }
+        const systemPrompt = buildSystemPrompt(char);
+        const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
+        let finalUrl = char.getApiUrl();
+        const proxyBase = corsProxyInput.value.trim();
+        if (proxyBase) finalUrl = proxyBase + '?url=' + encodeURIComponent(finalUrl);
+        const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
+        if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
+        try {
+            const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
+            if (!resp.ok) throw new Error(await resp.text());
+            const data = await resp.json();
+            let reply = data.choices[0].message.content;
+            const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
+            const finalReply = finalMatch ? finalMatch[1].trim() : reply;
+            const usage = data.usage || null;
+            return { reply: finalReply, usage };
+        } catch(err) {
+            console.error(err);
+            return { reply: "【信差迷途】" + err.message, usage: null };
+        }
     }
-    const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
-    if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
-    try {
-        const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
-        if (!resp.ok) throw new Error(await resp.text());
-        const data = await resp.json();
-        let reply = data.choices[0].message.content;
-        const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
-        const finalReply = finalMatch ? finalMatch[1].trim() : reply;
-        const usage = data.usage || null;
-        return { reply: finalReply, usage };
-    } catch(err) {
-        console.error(err);
-        return { reply: "【信差迷途】" + err.message, usage: null };
-    }
-}
 
     function buildSystemPrompt(char) {
         let parts = [];
@@ -505,17 +554,13 @@
         saveAllToLocal(); renderChatHistory();
         showTyping();
         const result = await callSingleAI(text);
-hideTyping();
-if (result && result.reply) {
-    // 保存到历史（不保存 usage，保持简单）
-    char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
-    while(char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift();
-    saveAllToLocal();
-    // 直接在界面上追加新消息，并显示 token（避免重新渲染整个历史，否则会丢失 token 显示）
-    addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
-    // 注意：不再调用 renderChatHistory()，否则会重新渲染所有消息，导致刚刚显示 token 的这条消息被覆盖（因为历史里没有 usage）
-    // 如果你希望保持历史同步，可以继续调用 renderChatHistory()，但会丢失新消息的 token 显示。这里选择增量追加。
-}
+        hideTyping();
+        if (result && result.reply) {
+            char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
+            while(char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift();
+            saveAllToLocal();
+            addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
+        }
     }
 
     // 群聊模式函数
@@ -524,8 +569,7 @@ if (result && result.reply) {
         if (groupMessages.length === 0) { chatArea.innerHTML = '<div style="text-align:center; padding:20px;">✨ 群聊尚未开始，发送消息吧 ✨</div>'; return; }
         for (const msg of groupMessages) {
             const isUser = msg.isUser;
-            const div = document.createElement('div');
-            div.className = `message-card ${isUser ? 'user-letter' : 'ai-letter'}`;
+            const div = document.createElement('div'); div.className = `message-card ${isUser ? 'user-letter' : 'ai-letter'}`;
             const paper = document.createElement('div'); paper.className = 'letter-paper';
             const stamp = document.createElement('span'); stamp.className = 'stamp'; stamp.textContent = isUser ? '寄' : '复';
             const nameSpan = document.createElement('div'); nameSpan.style.fontSize = '0.7rem'; nameSpan.style.fontWeight = 'bold'; nameSpan.style.marginBottom = '4px'; nameSpan.textContent = msg.sender;
@@ -541,13 +585,10 @@ if (result && result.reply) {
         if (!role.apiKey) { console.warn(role.name, "无API Key"); return null; }
         const systemPrompt = role.jailbreakPrompt + "\n【角色设定】\n" + role.charPrompt + (role.lorebook ? "\n【世界】"+role.lorebook : "") + (role.longTermSummary ? "\n【记忆】"+role.longTermSummary : "");
         const apiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.isUser ? "user" : "assistant", content: m.content }))];
-        let finalUrl = role.apiUrl;
+        let finalUrl = role.getApiUrl();
         const proxyBase = corsProxyInput.value.trim();
-        if (proxyBase) {
-            finalUrl = proxyBase + '?url=' + encodeURIComponent(role.apiUrl);
-        }
+        if (proxyBase) finalUrl = proxyBase + '?url=' + encodeURIComponent(finalUrl);
         const requestBody = { model: role.model, messages: apiMessages, max_tokens: role.maxTokens, temperature: role.temperature, top_p: role.topP };
-        // 群聊模式不发送 top_k
         try {
             const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${role.apiKey}` }, body: JSON.stringify(requestBody) });
             if (!resp.ok) throw new Error(await resp.text());
@@ -587,13 +628,7 @@ if (result && result.reply) {
         characters.forEach(char => {
             const isChecked = groupRoleIds.includes(char.id);
             const item = document.createElement('div'); item.className = 'group-role-item';
-            item.innerHTML = `
-                <span class="group-role-name">${escapeHtml(char.name)}</span>
-                <div style="display:flex; gap:6px;">
-                    <button class="group-role-test" data-id="${char.id}" style="background:none; border:none; cursor:pointer;" title="测试API">🔌</button>
-                    <button class="group-role-toggle" data-id="${char.id}">${isChecked ? '✅' : '➕'}</button>
-                </div>
-            `;
+            item.innerHTML = `<span class="group-role-name">${escapeHtml(char.name)}</span><div style="display:flex; gap:6px;"><button class="group-role-test" data-id="${char.id}" style="background:none; border:none; cursor:pointer;" title="测试API">🔌</button><button class="group-role-toggle" data-id="${char.id}">${isChecked ? '✅' : '➕'}</button></div>`;
             groupRoleListDiv.appendChild(item);
         });
         document.querySelectorAll('.group-role-test').forEach(btn => {
@@ -601,7 +636,7 @@ if (result && result.reply) {
                 const id = btn.dataset.id;
                 const role = characters.find(c => c.id === id);
                 if (!role) return;
-                const result = await testAPIConnection(role.apiUrl, role.apiKey, role.model);
+                const result = await testAPIConnection(role.getApiUrl(), role.apiKey, role.model);
                 alert(result.message);
             });
         });
@@ -642,12 +677,8 @@ if (result && result.reply) {
         addBtn.onclick = () => {
             const name = prompt("角色名");
             if(name){
-                const newChar = new CharacterData(
-                    generateId(), name, "", "", "", "", 20, "", [], [],
-                    globalApiUrlGroup.value,
-                    globalApiKeyGroup.value,
-                    "deepseek-chat", 0.85, 0.9, 2000, 50, 500, 50
-                );
+                const newChar = new CharacterData(generateId(), name, "", "", "", "", 20, "", [], [],
+                    "https://api.deepseek.com", "/v1/chat/completions", globalApiKeyGroup.value, "deepseek-chat", 0.85, 0.9, 2000, 50, 500, 50);
                 characters.push(newChar);
                 currentCharId = newChar.id;
                 renderTabs();
@@ -676,7 +707,7 @@ if (result && result.reply) {
     testApiBtn.addEventListener('click', async () => {
         const char = getCurrentChar();
         if (!char) return;
-        const result = await testAPIConnection(char.apiUrl, char.apiKey, char.model);
+        const result = await testAPIConnection(char.getApiUrl(), char.apiKey, char.model);
         showTestResult(result.success, result.message);
     });
     modelSelect.addEventListener('change', () => { customModelField.style.display = modelSelect.value === 'custom' ? 'block' : 'none'; });
@@ -709,7 +740,7 @@ if (result && result.reply) {
                 const newChar = new CharacterData(
                     generateId(), data.name || "导入角色", data.charPrompt || "", data.userPrompt || "", data.lorebook || "", data.jailbreakPrompt || "",
                     data.memoryLimit, data.longTermSummary || "", data.conversationHistory || [], data.dailySummaries || [],
-                    data.apiUrl, data.apiKey, data.model, data.temperature, data.topP, data.maxTokens, data.minWords, data.maxWords, data.topK
+                    data.apiHost, data.apiPath, data.apiKey, data.model, data.temperature, data.topP, data.maxTokens, data.minWords, data.maxWords, data.topK
                 );
                 characters.push(newChar);
                 currentCharId = newChar.id;
@@ -731,7 +762,8 @@ if (result && result.reply) {
     jailbreakPromptInput.addEventListener('change', () => saveCurrentCharSettings());
     memoryLimitSlider.addEventListener('input', () => { memoryLimitDisplay.innerText = memoryLimitSlider.value; saveCurrentCharSettings(); });
     apiKeyInput.addEventListener('change', () => saveCurrentCharSettings());
-    apiUrlInput.addEventListener('change', () => saveCurrentCharSettings());
+    apiHostInput.addEventListener('change', () => saveCurrentCharSettings());
+    apiPathInput.addEventListener('change', () => saveCurrentCharSettings());
     customModelInput.addEventListener('change', () => saveCurrentCharSettings());
     corsProxyInput.addEventListener('change', () => saveAllToLocal());
 
