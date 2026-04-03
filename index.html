@@ -5,31 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <title>锦书·灵犀阁 | 角色扮演+群聊</title>
     <style>
+        /* 样式保持不变，此处省略以节省篇幅，请从之前版本复制完整样式 */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { background: #c4aa7b; min-height: 100vh; padding: 16px; font-family: '华文楷书', '楷体', 'Microsoft YaHei', serif; }
         .main-container { max-width: 1400px; margin: 0 auto; background: #fef7e8; border-radius: 4px 20px 20px 20px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.4); padding: 16px 20px 20px; position: relative; }
         .main-container::before { content: "✉"; position: absolute; top: -18px; left: 20px; font-size: 32px; color: #b48c48; background: #fef7e8; padding: 0 10px; }
-
         .mode-switch { display: flex; gap: 12px; justify-content: center; margin-bottom: 20px; }
         .mode-btn { background: #e8dcc8; border: none; padding: 8px 24px; border-radius: 40px; font-family: inherit; font-size: 1rem; cursor: pointer; transition: all 0.2s; color: #5a3c24; }
         .mode-btn.active { background: #a57748; color: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-
         .two-layout { display: flex; gap: 20px; flex-wrap: wrap; }
         .chat-section { flex: 2; min-width: 260px; }
         .settings-section { flex: 1.5; min-width: 260px; background: #fcf5e6; border-radius: 20px; padding: 16px; border: 1px solid #ebddc0; transition: all 0.2s; }
         .settings-header { display: none; cursor: pointer; background: #e8dcc8; padding: 8px 12px; border-radius: 30px; margin-bottom: 12px; text-align: center; font-weight: bold; color: #5a3c24; }
         @media (max-width: 700px) { .settings-section.collapsed .settings-content { display: none; } .settings-header { display: block; } }
-
         .character-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid #e6d5b8; padding-bottom: 10px; }
         .char-tab { background: #e8dcc8; border: none; padding: 6px 14px; border-radius: 30px; font-family: inherit; font-size: 0.8rem; cursor: pointer; }
         .char-tab.active { background: #a57748; color: white; }
         .add-char-btn { background: #dac292; border: none; padding: 6px 14px; border-radius: 30px; cursor: pointer; font-size: 0.75rem; }
-
         .correspondence { background: rgba(250, 245, 235, 0.7); border-radius: 16px; padding: 12px; height: 460px; overflow-y: auto; margin-bottom: 12px; }
         .write-area { background: #fffbf0; border-radius: 28px; padding: 8px 12px; display: flex; gap: 8px; }
         .write-area input { flex: 1; background: #fffef9; border: 1px solid #e6d2b0; border-radius: 40px; padding: 8px 16px; font-family: inherit; font-size: 0.85rem; }
         .write-area button { background: #a57748; border: none; color: white; padding: 6px 16px; border-radius: 40px; cursor: pointer; }
-
         .field { margin-bottom: 12px; }
         .field label { display: block; font-size: 0.7rem; color: #7c5a3c; margin-bottom: 3px; font-weight: bold; }
         .field input, .field textarea, .field select { width: 100%; background: #fffef5; border: 1px solid #e9dbbc; border-radius: 10px; padding: 6px 8px; font-family: inherit; font-size: 0.75rem; }
@@ -40,7 +36,6 @@
         h4 { color: #7a4b2c; margin-bottom: 8px; font-size: 0.85rem; border-left: 3px solid #bc8f5a; padding-left: 8px; }
         .char-actions { display: flex; gap: 8px; margin-top: 10px; }
         .char-actions button { flex: 1; font-size: 0.65rem; background: #d4c0a0; border: none; padding: 4px; border-radius: 20px; cursor: pointer; }
-
         .message-card { margin-bottom: 16px; position: relative; }
         .user-letter { display: flex; justify-content: flex-end; }
         .ai-letter { display: flex; justify-content: flex-start; }
@@ -56,7 +51,6 @@
         .test-fail { background: #f0d6d6; color: #a33; }
         .calendar-panel { background: #fff7e8; border-radius: 16px; padding: 10px; margin-top: 12px; border: 1px solid #ecd9b4; }
         .typing-indicator { background: #fdf3e0; border-radius: 12px; padding: 8px 14px; display: inline-block; color: #a77948; }
-
         .group-role-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
         .group-role-item { display: flex; align-items: center; justify-content: space-between; background: #fffef5; border-radius: 30px; padding: 4px 12px; border: 1px solid #e6d5b8; }
         .group-role-name { font-size: 0.75rem; }
@@ -92,12 +86,12 @@
         <div class="settings-section" id="settingsSection">
             <div class="settings-header" id="settingsToggle">⚙️ 展开/收起设置面板</div>
             <div class="settings-content">
-                <!-- 单人模式专用设置 -->
                 <div id="singleSettings">
                     <h4>🔌 API 与模型</h4>
                     <div class="field"><label>🔑 API Key</label><input type="password" id="apiKeyInput" placeholder="sk-..."></div>
                     <div class="field"><label>🌐 API 地址</label><input type="text" id="apiUrlInput" value="https://api.deepseek.com/v1/chat/completions"></div>
                     <div class="param-row"><div class="field"><label>🤖 模型</label><select id="modelSelect"><option value="deepseek-chat">DeepSeek-Chat</option><option value="deepseek-reasoner">DeepSeek-Reasoner</option><option value="custom">自定义</option></select></div><div class="field" id="customModelField" style="display:none;"><label>自定义模型名</label><input type="text" id="customModelInput"></div></div>
+                    <div class="field"><label>🔄 CORS 代理地址（可选）</label><input type="text" id="corsProxy" placeholder="例如: https://cors-proxy.xxxx.workers.dev/?url="><div style="font-size:0.6rem; color:#9b7b54;">如果遇到CORS错误，请填写代理地址（末尾需带?url=）</div></div>
                     <div style="display:flex; gap:8px;"><button id="testApiBtn" class="small-btn" style="background:#6b8c5c;">🔌 测试连接</button><button id="saveApiBtn" class="small-btn" style="background:#8b6b42;">💾 保存API设置</button></div>
                     <div id="testResult" class="test-result" style="display:none;"></div>
 
@@ -121,7 +115,6 @@
                     <div class="field"><label>📂 导入角色 (JSON/PNG)</label><input type="file" id="importCharInput" accept=".json,.png"><button id="importCharBtn" class="small-btn">📥 导入为新角色</button></div>
                 </div>
 
-                <!-- 群聊模式专用设置 -->
                 <div id="groupSettings" style="display:none;">
                     <h4>👥 群聊成员管理</h4>
                     <div class="group-role-list" id="groupRoleList"></div>
@@ -180,6 +173,7 @@
     const modelSelect = document.getElementById('modelSelect');
     const customModelField = document.getElementById('customModelField');
     const customModelInput = document.getElementById('customModelInput');
+    const corsProxyInput = document.getElementById('corsProxy');
     const testApiBtn = document.getElementById('testApiBtn');
     const saveApiBtn = document.getElementById('saveApiBtn');
     const testResultDiv = document.getElementById('testResult');
@@ -213,7 +207,7 @@
     const globalApiUrlGroup = document.getElementById('globalApiUrlGroup');
     const globalApiKeyGroup = document.getElementById('globalApiKeyGroup');
 
-    // ---------- 通用函数 ----------
+    // 辅助函数
     function getCurrentTimestamp() {
         const now = new Date();
         return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
@@ -239,6 +233,8 @@
         localStorage.setItem('groupRoleIds', JSON.stringify(groupRoleIds));
         localStorage.setItem('globalApiUrlGroup', globalApiUrlGroup.value);
         localStorage.setItem('globalApiKeyGroup', globalApiKeyGroup.value);
+        // 保存代理地址
+        localStorage.setItem('corsProxy', corsProxyInput.value);
     }
 
     function loadAllFromLocal() {
@@ -282,14 +278,21 @@
 
         globalApiUrlGroup.value = localStorage.getItem('globalApiUrlGroup') || "https://api.deepseek.com/v1/chat/completions";
         globalApiKeyGroup.value = localStorage.getItem('globalApiKeyGroup') || "";
+        const savedProxy = localStorage.getItem('corsProxy');
+        if (savedProxy) corsProxyInput.value = savedProxy;
     }
 
-    // ---------- API 测试函数 ----------
+    // ---------- API 测试函数（支持代理） ----------
     async function testAPIConnection(apiUrl, apiKey, model) {
         if (!apiKey) return { success: false, message: "❌ API Key 为空" };
         if (!apiUrl) return { success: false, message: "❌ API 地址为空" };
+        let finalUrl = apiUrl;
+        const proxyBase = corsProxyInput.value.trim();
+        if (proxyBase) {
+            finalUrl = proxyBase + '?url=' + encodeURIComponent(apiUrl);
+        }
         try {
-            const response = await fetch(apiUrl, {
+            const response = await fetch(finalUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
                 body: JSON.stringify({
@@ -435,11 +438,15 @@
         if (!char.apiKey) { alert("请填写API Key"); return "【无API Key】"; }
         const systemPrompt = buildSystemPrompt(char);
         const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
+        let finalUrl = char.apiUrl;
+        const proxyBase = corsProxyInput.value.trim();
+        if (proxyBase) {
+            finalUrl = proxyBase + '?url=' + encodeURIComponent(char.apiUrl);
+        }
         const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
-        // 单人模式：如果 topK > 0 则添加（用户可自行决定是否开启）
         if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
         try {
-            const resp = await fetch(char.apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
+            const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
             if (!resp.ok) throw new Error(await resp.text());
             const data = await resp.json();
             let reply = data.choices[0].message.content;
@@ -502,11 +509,15 @@
         if (!role.apiKey) { console.warn(role.name, "无API Key"); return null; }
         const systemPrompt = role.jailbreakPrompt + "\n【角色设定】\n" + role.charPrompt + (role.lorebook ? "\n【世界】"+role.lorebook : "") + (role.longTermSummary ? "\n【记忆】"+role.longTermSummary : "");
         const apiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.isUser ? "user" : "assistant", content: m.content }))];
+        let finalUrl = role.apiUrl;
+        const proxyBase = corsProxyInput.value.trim();
+        if (proxyBase) {
+            finalUrl = proxyBase + '?url=' + encodeURIComponent(role.apiUrl);
+        }
         const requestBody = { model: role.model, messages: apiMessages, max_tokens: role.maxTokens, temperature: role.temperature, top_p: role.topP };
-        // 群聊模式：强制不发送 top_k 参数（兼容不支持该参数的 API）
-        // 注意：不添加 top_k 字段
+        // 群聊模式不发送 top_k
         try {
-            const resp = await fetch(role.apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${role.apiKey}` }, body: JSON.stringify(requestBody) });
+            const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${role.apiKey}` }, body: JSON.stringify(requestBody) });
             if (!resp.ok) throw new Error(await resp.text());
             const data = await resp.json();
             let reply = data.choices[0].message.content;
@@ -690,6 +701,7 @@
     apiKeyInput.addEventListener('change', () => saveCurrentCharSettings());
     apiUrlInput.addEventListener('change', () => saveCurrentCharSettings());
     customModelInput.addEventListener('change', () => saveCurrentCharSettings());
+    corsProxyInput.addEventListener('change', () => saveAllToLocal());
 
     loadAllFromLocal();
     renderTabs();
