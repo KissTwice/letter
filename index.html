@@ -685,31 +685,28 @@ dailySummaryBox.innerHTML = summaryText;
     }
     const userMsg = char.conversationHistory[userMsgIndex];
     
-    // 截断历史到用户消息之前（保留用户消息及之前，删除之后所有）
-    char.conversationHistory = char.conversationHistory.slice(0, userMsgIndex + 1);
-    saveAllToLocal();
-    renderChatHistory();
-    
+    // 重要：不要截断历史！保留原有所有对话，包括当前 AI 回复。
+    // 直接调用 API 生成新回复
     showTyping();
     const result = await callSingleAI(userMsg.content);
     hideTyping();
     
     if (result && result.reply) {
-        // 将新回复作为备选添加
-        // 由于历史中已没有原来的回复，这里需要重新生成并添加
-        const newMsgIndex = char.conversationHistory.length; // 即将添加的位置
-        char.conversationHistory.push({
-            role: "assistant",
-            content: result.reply,
-            timestamp: getCurrentTimestamp(),
-            alternatives: [result.reply],
-            currentIndex: 0
-        });
-        // 如果之前已有同位置的回复（因为截断后没有），直接添加
-        saveAllToLocal();
-        renderChatHistory();
-        // 可选：自动显示新回复的 token
-        addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), newMsgIndex, result.usage);
+        // 使用 addAlternative 方法将新回复添加到备选列表中
+        const success = char.addAlternative(msgIndex, result.reply);
+        if (success) {
+            // 更新 usage 信息（可选，因为 addAlternative 没有保存 usage，可以手动添加）
+            // 注意：addAlternative 不会保存 usage，但我们可以将 usage 附加到消息上
+            if (result.usage) {
+                char.conversationHistory[msgIndex].usage = result.usage;
+            }
+            saveAllToLocal();
+            renderChatHistory(); // 重新渲染，会显示切换按钮
+        } else {
+            alert("添加备选回复失败");
+        }
+    } else {
+        alert("重新生成失败，请检查网络或 API 配置");
     }
 }
 
@@ -754,11 +751,25 @@ dailySummaryBox.innerHTML = summaryText;
     function showTyping() { if(typingDiv) typingDiv.remove(); typingDiv = document.createElement('div'); typingDiv.className = 'message-card ai-letter'; typingDiv.innerHTML = `<div class="letter-paper"><div class="typing-indicator">✍️ 研墨中...</div></div>`; chatArea.appendChild(typingDiv); chatArea.scrollTop = chatArea.scrollHeight; }
     function hideTyping() { if(typingDiv) { typingDiv.remove(); typingDiv = null; } }
 
-   async function handleSingleSend() {
+  async function handleSingleSend() {
+    console.log("handleSingleSend 被调用");
     const text = userInput.value.trim();
-    if (!text) return;
-    userInput.value = '';
+    if (!text) {
+        alert("请输入消息内容");
+        return;
+    }
+    console.log("用户消息：", text);
     const char = getCurrentChar();
+    if (!char) {
+        alert("未找到当前角色");
+        return;
+    }
+    console.log("当前角色：", char.name);
+    if (!char.apiKey) {
+        alert("请先在右侧设置中填写 API Key");
+        return;
+    }
+    userInput.value = '';
     
     // 查找最后一个用户消息的索引，并删除其之后的所有消息（分支截断）
     let lastUserIdx = -1;
@@ -781,6 +792,7 @@ dailySummaryBox.innerHTML = summaryText;
     showTyping();
     const result = await callSingleAI(text);
     hideTyping();
+    console.log("AI 回复结果：", result);
     if (result && result.reply) {
         const newMsgIndex = char.conversationHistory.length;
         char.conversationHistory.push({
@@ -793,6 +805,8 @@ dailySummaryBox.innerHTML = summaryText;
         while (char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift();
         saveAllToLocal();
         addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), newMsgIndex, result.usage);
+    } else {
+        alert("AI 回复失败，请检查控制台错误或 API 配置");
     }
 }
 
@@ -1107,6 +1121,15 @@ ${convText}`;
     renderTabs();
     if (currentMode === 'single') loadCurrentCharToUI();
     else { renderGroupMessages(); renderGroupRoleList(); }
+    // 重新绑定寄信按钮（确保生效）
+if (sendBtn) {
+    sendBtn.removeEventListener('click', handleSingleSend); // 移除旧的可能无效的监听
+    sendBtn.addEventListener('click', () => {
+        if (currentMode === 'single') handleSingleSend();
+        else handleGroupSend();
+    });
+    console.log("寄信按钮已重新绑定");
+}
 </script>
 </body>
 </html>
