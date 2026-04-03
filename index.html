@@ -164,7 +164,7 @@
     class CharacterData {
         constructor(id, name, charPrompt, userPrompt, userName, lorebook, jailbreakPrompt, memoryLimit, longTermSummary, conversationHistory, dailySummaries, apiHost, apiPath, apiKey, model, temperature, topP, maxTokens, minWords, maxWords, topK) {
             this.id = id; this.name = name; this.charPrompt = charPrompt; this.userPrompt = userPrompt; this.userName = userName || ""; this.lorebook = lorebook;
-            this.jailbreakPrompt = jailbreakPrompt; this.memoryLimit = memoryLimit || 20; this.longTermSummary = longTermSummary || "";
+            this.jailbreakPrompt = jailbreakPrompt; this.memoryLimit = memoryLimit || 20; this.longTermSummary = longTermSummary ? String(longTermSummary) : "";
             // 标准化历史消息格式：每条消息包含 role, content, timestamp, alternatives(仅assistant)
 		this.conversationHistory = (conversationHistory || []).map(msg => {
     			if (msg.role === 'assistant' && !msg.alternatives) {
@@ -543,7 +543,11 @@ switchAlternative(msgIndex, altIndex) {
         maxTokensInput.value = char.maxTokens;
         minWordsInput.value = char.minWords;
         maxWordsInput.value = char.maxWords;
-        dailySummaryBox.innerHTML = char.longTermSummary ? char.longTermSummary.replace(/\n/g, '<br>') : '🌙 暂无总结';
+        let summaryText = '🌙 暂无总结';
+if (char.longTermSummary && typeof char.longTermSummary === 'string') {
+    summaryText = char.longTermSummary.replace(/\n/g, '<br>');
+}
+dailySummaryBox.innerHTML = summaryText;
         renderChatHistory();
         // 同步预设下拉框
         const currentHost = apiHostInput.value, currentPath = apiPathInput.value;
