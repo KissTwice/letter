@@ -91,7 +91,7 @@
                     <div class="field"><label>🔑 API Key</label><input type="password" id="apiKeyInput" placeholder="sk-..."></div>
                     <div class="field"><label>🌐 API 地址</label><input type="text" id="apiUrlInput" value="https://api.deepseek.com/v1/chat/completions"></div>
                     <div class="param-row"><div class="field"><label>🤖 模型</label><select id="modelSelect"><option value="deepseek-chat">DeepSeek-Chat</option><option value="deepseek-reasoner">DeepSeek-Reasoner</option><option value="custom">自定义</option></select></div><div class="field" id="customModelField" style="display:none;"><label>自定义模型名</label><input type="text" id="customModelInput"></div></div>
-                    <div class="field"><label>🔄 CORS 代理地址（可选）</label><input type="text" id="corsProxy" placeholder="例如: https://cors-proxy.xxxx.workers.dev/?url="><div style="font-size:0.6rem; color:#9b7b54;">如果遇到CORS错误，请填写代理地址（末尾需带?url=）</div></div>
+                    <div class="field"><label>🔄 CORS 代理地址（可选）</label><input type="text" id="corsProxy" value="https://cors-proxy.kisstwice.workers.dev/?url=" placeholder="例如: https://cors-proxy.xxxx.workers.dev/?url="><div style="font-size:0.6rem; color:#9b7b54;">如果遇到CORS错误，请填写代理地址（末尾需带?url=）</div></div>
                     <div style="display:flex; gap:8px;"><button id="testApiBtn" class="small-btn" style="background:#6b8c5c;">🔌 测试连接</button><button id="saveApiBtn" class="small-btn" style="background:#8b6b42;">💾 保存API设置</button></div>
                     <div id="testResult" class="test-result" style="display:none;"></div>
 
@@ -383,7 +383,7 @@
         }
     }
 
-    function addMessageToUI(content, role, timestamp, index) {
+    function addMessageToUI(content, role, timestamp, index, usage = null) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message-card ${role === 'user' ? 'user-letter' : 'ai-letter'}`;
         const paper = document.createElement('div'); paper.className = 'letter-paper';
@@ -391,6 +391,16 @@
         const contentSpan = document.createElement('div'); contentSpan.style.whiteSpace = 'pre-wrap'; contentSpan.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
         const sig = document.createElement('div'); sig.className = 'signature'; sig.textContent = role === 'user' ? '—— 某 顿首' : `—— ${getCurrentChar()?.name || '卿'} 谨复`;
         const timeSpan = document.createElement('div'); timeSpan.className = 'timestamp'; timeSpan.textContent = timestamp || '时间不详';
+	 // 新增 token 显示
+    const tokenSpan = document.createElement('div');
+    tokenSpan.className = 'timestamp';
+    tokenSpan.style.fontSize = '0.5rem';
+    tokenSpan.style.color = '#b99e7c';
+    if (usage && usage.total_tokens) {
+        tokenSpan.textContent = `🔢 ${usage.total_tokens} tokens`;
+    } else {
+        tokenSpan.textContent = '';
+    }
         const actions = document.createElement('div'); actions.className = 'message-actions';
         if (role === 'user') {
             const editBtn = document.createElement('button'); editBtn.textContent = '✏️ 编辑';
@@ -401,7 +411,7 @@
             regenBtn.onclick = () => regenerateAIResponse(index);
             actions.appendChild(regenBtn);
         }
-        paper.appendChild(stamp); paper.appendChild(contentSpan); paper.appendChild(sig); paper.appendChild(timeSpan); paper.appendChild(actions);
+	paper.appendChild(stamp); paper.appendChild(contentSpan); paper.appendChild(sig); paper.appendChild(timeSpan);paper.appendChild(tokenSpan);paper.appendChild(actions);
         messageDiv.appendChild(paper); chatArea.appendChild(messageDiv); chatArea.scrollTop = chatArea.scrollHeight;
     }
 
@@ -413,9 +423,13 @@
         char.conversationHistory.push({ role: "user", content: newText, timestamp: getCurrentTimestamp() });
         saveAllToLocal(); renderChatHistory();
         showTyping();
-        const reply = await callSingleAI(newText);
-        hideTyping();
-        if (reply) { char.conversationHistory.push({ role: "assistant", content: reply, timestamp: getCurrentTimestamp() }); saveAllToLocal(); renderChatHistory(); }
+        const result = await callSingleAI(newText);
+	hideTyping();
+	if (result && result.reply) {
+   		char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
+    		saveAllToLocal();
+    		addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
+}
     }
 
     async function regenerateAIResponse(msgIndex) {
@@ -427,33 +441,42 @@
         char.conversationHistory = char.conversationHistory.slice(0, msgIndex);
         saveAllToLocal(); renderChatHistory();
         showTyping();
-        const reply = await callSingleAI(userMsg.content);
-        hideTyping();
-        if (reply) { char.conversationHistory.push({ role: "assistant", content: reply, timestamp: getCurrentTimestamp() }); saveAllToLocal(); renderChatHistory(); }
+        const result = await callSingleAI(userMsg.content);
+	hideTyping();
+	if (result && result.reply) {
+    	char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
+   	saveAllToLocal();
+    	addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
+}
     }
 
     async function callSingleAI(userMessage) {
-        const char = getCurrentChar();
-        if (!char) return null;
-        if (!char.apiKey) { alert("请填写API Key"); return "【无API Key】"; }
-        const systemPrompt = buildSystemPrompt(char);
-        const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
-        let finalUrl = char.apiUrl;
-        const proxyBase = corsProxyInput.value.trim();
-        if (proxyBase) {
-            finalUrl = proxyBase + '?url=' + encodeURIComponent(char.apiUrl);
-        }
-        const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
-        if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
-        try {
-            const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
-            if (!resp.ok) throw new Error(await resp.text());
-            const data = await resp.json();
-            let reply = data.choices[0].message.content;
-            const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
-            return finalMatch ? finalMatch[1].trim() : reply;
-        } catch(err) { console.error(err); return "【信差迷途】" + err.message; }
+    const char = getCurrentChar();
+    if (!char) return { reply: null, usage: null };
+    if (!char.apiKey) { alert("请填写API Key"); return { reply: "【无API Key】", usage: null }; }
+    const systemPrompt = buildSystemPrompt(char);
+    const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
+    let finalUrl = char.apiUrl;
+    const proxyBase = corsProxyInput.value.trim();
+    if (proxyBase) {
+        finalUrl = proxyBase + '?url=' + encodeURIComponent(char.apiUrl);
     }
+    const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
+    if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
+    try {
+        const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        let reply = data.choices[0].message.content;
+        const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
+        const finalReply = finalMatch ? finalMatch[1].trim() : reply;
+        const usage = data.usage || null;
+        return { reply: finalReply, usage };
+    } catch(err) {
+        console.error(err);
+        return { reply: "【信差迷途】" + err.message, usage: null };
+    }
+}
 
     function buildSystemPrompt(char) {
         let parts = [];
@@ -481,9 +504,18 @@
         while(char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift();
         saveAllToLocal(); renderChatHistory();
         showTyping();
-        const reply = await callSingleAI(text);
-        hideTyping();
-        if (reply) { char.conversationHistory.push({ role: "assistant", content: reply, timestamp: getCurrentTimestamp() }); while(char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift(); saveAllToLocal(); renderChatHistory(); }
+        const result = await callSingleAI(text);
+hideTyping();
+if (result && result.reply) {
+    // 保存到历史（不保存 usage，保持简单）
+    char.conversationHistory.push({ role: "assistant", content: result.reply, timestamp: getCurrentTimestamp() });
+    while(char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift();
+    saveAllToLocal();
+    // 直接在界面上追加新消息，并显示 token（避免重新渲染整个历史，否则会丢失 token 显示）
+    addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), null, result.usage);
+    // 注意：不再调用 renderChatHistory()，否则会重新渲染所有消息，导致刚刚显示 token 的这条消息被覆盖（因为历史里没有 usage）
+    // 如果你希望保持历史同步，可以继续调用 renderChatHistory()，但会丢失新消息的 token 显示。这里选择增量追加。
+}
     }
 
     // 群聊模式函数
