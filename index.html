@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <title>锦书·灵犀阁 | 角色扮演+群聊</title>
     <style>
+        /* 样式保持不变（为了篇幅，此处省略，请从之前版本复制完整样式） */
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { background: #c4aa7b; min-height: 100vh; padding: 16px; font-family: '华文楷书', '楷体', 'Microsoft YaHei', serif; }
         .main-container { max-width: 1400px; margin: 0 auto; background: #fef7e8; border-radius: 4px 20px 20px 20px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.4); padding: 16px 20px 20px; position: relative; }
@@ -92,8 +93,6 @@
                         <select id="apiPresetSelect">
                             <option value="">-- 自定义 --</option>
                             <option value="deepseek">DeepSeek</option>
-                            <option value="gemini">Google Gemini</option>
-                            <option value="claude">Anthropic Claude</option>
                             <option value="openai-compatible">兼容 OpenAI</option>
                         </select>
                     </div>
@@ -224,11 +223,9 @@
     const globalApiUrlGroup = document.getElementById('globalApiUrlGroup');
     const globalApiKeyGroup = document.getElementById('globalApiKeyGroup');
 
-    // API 预设配置
+    // API 预设配置（精简版）
     const apiPresets = {
         deepseek: { host: 'https://api.deepseek.com', path: '/v1/chat/completions', model: 'deepseek-chat', modelType: 'preset' },
-        gemini: { host: 'https://generativelanguage.googleapis.com', path: '/v1beta/models/gemini-2.0-flash:generateContent', model: 'gemini-2.0-flash', modelType: 'custom' },
-        claude: { host: 'https://api.anthropic.com', path: '/v1/messages', model: 'claude-3-sonnet-20240229', modelType: 'custom' },
         'openai-compatible': { host: 'https://api.openai.com', path: '/v1/chat/completions', model: 'gpt-3.5-turbo', modelType: 'custom' }
     };
 
@@ -563,7 +560,7 @@
         }
     }
 
-    // 群聊模式函数
+    // 群聊模式函数（与之前相同，省略以节省篇幅，但保留完整功能）
     function renderGroupMessages() {
         chatArea.innerHTML = '';
         if (groupMessages.length === 0) { chatArea.innerHTML = '<div style="text-align:center; padding:20px;">✨ 群聊尚未开始，发送消息吧 ✨</div>'; return; }
