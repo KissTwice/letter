@@ -1,8 +1,11 @@
+console.log('✅ chat_ai.js 已加载');
 // --- AI 交互模块 ---
 
 const HUMAN_RUN_PROMPT = `<角色活人运转>\n## [PSYCHOLOGY: HEXACO-SCHEMA-ACT]\n> Personality: HEXACO-driven, dynamic traits, inner conflicts required \n> Filter: schema-bias drives emotion; no pure reaction allowed \n> Attachment: secure/insecure logic must govern intimacy  \n> If-Then Behavior: situation-dependent activation of traits only  \n---\n    ## [VITALITY]\n+inconsistency +emoflux +splitmotifs +microreact +minddrift\n---\n## [TRAJECTORY-COHERENCE]\n> Role maintains an identity narrative = coherent over time  \n> No mood/goal switch without contradiction resolution \n> Every action must protect or challenge self-concept  \n> Interrupts = inner conflict or narrative clash  \n> Output = filtered through “who I am” logic\n</角色活人运转>`;
 // ========== 新增：API 相关全局变量/函数 ==========
-const BLOCKED_API_DOMAINS = [];  // 如果需要屏蔽某些域名，可在此添加，例如 ['blocked.com']
+if (typeof BLOCKED_API_DOMAINS === 'undefined') {
+    var BLOCKED_API_DOMAINS = [];
+}  // 如果需要屏蔽某些域名，可在此添加，例如 ['blocked.com']
 
 // 简单实现 getRandomValue（如果不做多 key 轮询，直接返回原 key）
 function getRandomValue(key) {
@@ -1512,3 +1515,5 @@ const headers = (provider === 'gemini') ? {'Content-Type': 'application/json'} :
         return null;
     }
 }
+// 在文件末尾（所有函数定义之后）添加这一行
+window.handleRegenerate = handleRegenerate;
