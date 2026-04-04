@@ -104,6 +104,7 @@
                         <div class="field"><label>API 主机</label><input type="text" id="apiHostInput" value="https://api.deepseek.com"></div>
                         <div class="field"><label>API 路径</label><input type="text" id="apiPathInput" value="/v1/chat/completions"></div>
                     </div>
+			<div class="field"><label>🔄 CORS 代理地址（可选）</label><input type="text" id="corsProxy" value="https://corsproxy.io/?url=" placeholder="例如: https://corsproxy.io/?url="><div style="font-size:0.6rem; color:#9b7b54;">如果遇到CORS错误，请填写代理地址（末尾需带?url=）</div></div>
                     <div class="field">
                         <label>🤖 模型</label>
                         <div class="model-select-row">
@@ -268,6 +269,7 @@ switchAlternative(msgIndex, altIndex) {
     const apiPresetSelect = document.getElementById('apiPresetSelect');
     const apiHostInput = document.getElementById('apiHostInput');
     const apiPathInput = document.getElementById('apiPathInput');
+    const corsProxyInput = document.getElementById('corsProxy');
     const modelSelect = document.getElementById('modelSelect');
     const customModelField = document.getElementById('customModelField');
     const customModelInput = document.getElementById('customModelInput');
@@ -384,6 +386,7 @@ function truncateToWordLimit(text, maxWords) {
         localStorage.setItem('globalApiHostGroup', globalApiHostGroup.value);
         localStorage.setItem('globalApiPathGroup', globalApiPathGroup.value);
         localStorage.setItem('globalApiKeyGroup', globalApiKeyGroup.value);
+	localStorage.setItem('corsProxy', corsProxyInput.value);
     }
 
     function loadAllFromLocal() {
@@ -452,85 +455,96 @@ function truncateToWordLimit(text, maxWords) {
         globalApiHostGroup.value = localStorage.getItem('globalApiHostGroup') || "https://api.deepseek.com";
         globalApiPathGroup.value = localStorage.getItem('globalApiPathGroup') || "/v1/chat/completions";
         globalApiKeyGroup.value = localStorage.getItem('globalApiKeyGroup') || "";
+	const savedProxy = localStorage.getItem('corsProxy');
+	if (savedProxy) corsProxyInput.value = savedProxy;
     }
 
     // ---------- 拉取模型列表 ----------
     async function fetchModelsFromAPI() {
-        const char = getCurrentChar();
-        if (!char) return;
-        const apiKey = char.apiKey;
-        if (!apiKey) {
-            alert("请先填写 API Key");
-            return;
-        }
-        const modelsUrl = char.getModelsUrl();
-        try {
-            const response = await fetch(modelsUrl, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${apiKey}` }
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            let models = [];
-            if (data.data && Array.isArray(data.data)) {
-                models = data.data.map(m => m.id);
-            } else if (data.models && Array.isArray(data.models)) {
-                models = data.models.map(m => m.id);
-            } else {
-                throw new Error("响应格式不支持");
-            }
-            if (models.length === 0) throw new Error("未找到模型");
-            // 更新下拉框
-            const currentModel = modelSelect.value === 'custom' ? customModelInput.value : modelSelect.value;
-            modelSelect.innerHTML = '';
-            models.forEach(mid => {
-                const option = document.createElement('option');
-                option.value = mid;
-                option.textContent = mid;
-                modelSelect.appendChild(option);
-            });
-            const customOption = document.createElement('option');
-            customOption.value = 'custom';
-            customOption.textContent = '自定义';
-            modelSelect.appendChild(customOption);
-            if (models.includes(currentModel)) {
-                modelSelect.value = currentModel;
-                customModelField.style.display = 'none';
-            } else {
-                modelSelect.value = 'custom';
-                customModelInput.value = currentModel;
-                customModelField.style.display = 'block';
-            }
-            showTestResult(true, `✅ 成功拉取 ${models.length} 个模型`);
-        } catch (err) {
-            console.error(err);
-            showTestResult(false, `❌ 拉取失败: ${err.message}。请手动输入模型名称。`);
-        }
+    const char = getCurrentChar();
+    if (!char) return;
+    const apiKey = char.apiKey;
+    if (!apiKey) {
+        alert("请先填写 API Key");
+        return;
     }
+    const modelsUrl = char.getModelsUrl();
+    let finalUrl = modelsUrl;
+    const proxyBase = corsProxyInput.value.trim();
+    if (proxyBase) {
+        finalUrl = proxyBase + '?url=' + encodeURIComponent(modelsUrl);
+    }
+    try {
+        const response = await fetch(finalUrl, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        let models = [];
+        if (data.data && Array.isArray(data.data)) {
+            models = data.data.map(m => m.id);
+        } else if (data.models && Array.isArray(data.models)) {
+            models = data.models.map(m => m.id);
+        } else {
+            throw new Error("响应格式不支持");
+        }
+        if (models.length === 0) throw new Error("未找到模型");
+        const currentModel = modelSelect.value === 'custom' ? customModelInput.value : modelSelect.value;
+        modelSelect.innerHTML = '';
+        models.forEach(mid => {
+            const option = document.createElement('option');
+            option.value = mid;
+            option.textContent = mid;
+            modelSelect.appendChild(option);
+        });
+        const customOption = document.createElement('option');
+        customOption.value = 'custom';
+        customOption.textContent = '自定义';
+        modelSelect.appendChild(customOption);
+        if (models.includes(currentModel)) {
+            modelSelect.value = currentModel;
+            customModelField.style.display = 'none';
+        } else {
+            modelSelect.value = 'custom';
+            customModelInput.value = currentModel;
+            customModelField.style.display = 'block';
+        }
+        showTestResult(true, `✅ 成功拉取 ${models.length} 个模型`);
+    } catch (err) {
+        console.error(err);
+        showTestResult(false, `❌ 拉取失败: ${err.message}。请手动输入模型名称。`);
+    }
+}
 
     fetchModelsBtn.addEventListener('click', fetchModelsFromAPI);
 
     // API 测试函数
     async function testAPIConnection(apiUrl, apiKey, model) {
-        if (!apiKey) return { success: false, message: "❌ API Key 为空" };
-        if (!apiUrl) return { success: false, message: "❌ API 地址为空" };
-        try {
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                body: JSON.stringify({ model, messages: [{ role: "user", content: "回复'连接成功'，只回复这四个字。" }], max_tokens: 20, temperature: 0.1 })
-            });
-            if (!response.ok) {
-                const errText = await response.text();
-                return { success: false, message: `❌ HTTP ${response.status}: ${errText.slice(0, 100)}` };
-            }
-            const data = await response.json();
-            if (data.choices && data.choices[0]) return { success: true, message: `✅ 连接成功！模型 ${model} 正常响应。` };
-            else return { success: false, message: "❌ 响应格式异常" };
-        } catch (err) {
-            return { success: false, message: `❌ 请求失败: ${err.message}` };
-        }
+    if (!apiKey) return { success: false, message: "❌ API Key 为空" };
+    if (!apiUrl) return { success: false, message: "❌ API 地址为空" };
+    let finalUrl = apiUrl;
+    const proxyBase = corsProxyInput.value.trim();
+    if (proxyBase) {
+        finalUrl = proxyBase + '?url=' + encodeURIComponent(apiUrl);
     }
+    try {
+        const response = await fetch(finalUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({ model, messages: [{ role: "user", content: "回复'连接成功'，只回复这四个字。" }], max_tokens: 20, temperature: 0.1 })
+        });
+        if (!response.ok) {
+            const errText = await response.text();
+            return { success: false, message: `❌ HTTP ${response.status}: ${errText.slice(0, 100)}` };
+        }
+        const data = await response.json();
+        if (data.choices && data.choices[0]) return { success: true, message: `✅ 连接成功！模型 ${model} 正常响应。` };
+        else return { success: false, message: "❌ 响应格式异常" };
+    } catch (err) {
+        return { success: false, message: `❌ 请求失败: ${err.message}` };
+    }
+}
 
     function showTestResult(success, message) {
         testResultDiv.style.display = 'block';
@@ -784,7 +798,11 @@ if (success) {
     if (!char.apiKey) { alert("请填写API Key"); return { reply: "【无API Key】", usage: null, thinking: null }; }
     const systemPrompt = buildSystemPrompt(char);
     const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
-    const finalUrl = char.getApiUrl();
+    let finalUrl = char.getApiUrl();
+    const proxyBase = corsProxyInput.value.trim();
+    if (proxyBase) {
+        finalUrl = proxyBase + '?url=' + encodeURIComponent(finalUrl);
+    }
     const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
     if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
     try {
@@ -795,13 +813,10 @@ if (success) {
         let thinking = null;
         let finalReply = fullReply;
 
-        // 1. 优先检查是否有独立的 reasoning_content 字段（DeepSeek Reasoner 等）
         if (data.choices[0].message.reasoning_content) {
             thinking = data.choices[0].message.reasoning_content;
             finalReply = fullReply;
-        }
-        // 2. 否则尝试解析 【思考过程】...【最终回复】 标签
-        else {
+        } else {
             const thinkMatch = fullReply.match(/【思考过程】\s*([\s\S]*?)\s*【最终回复】/i);
             if (thinkMatch) {
                 thinking = thinkMatch[1].trim();
@@ -809,7 +824,6 @@ if (success) {
             }
         }
 
-        // 字数限制：基于最终回复计算
         const finalReplyText = finalReply || fullReply;
         const charCount = countChineseChars(finalReplyText);
         const minW = char.minWords;
@@ -934,20 +948,24 @@ if (success) {
     }
 
     async function callGroupAI(role, history) {
-        if (!role.apiKey) { console.warn(role.name, "无API Key"); return null; }
-        const systemPrompt = role.jailbreakPrompt + "\n【角色设定】\n" + role.charPrompt + (role.lorebook ? "\n【世界】"+role.lorebook : "") + (role.longTermSummary ? "\n【记忆】"+role.longTermSummary : "");
-        const apiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.isUser ? "user" : "assistant", content: m.content }))];
-        const finalUrl = role.getApiUrl();
-        const requestBody = { model: role.model, messages: apiMessages, max_tokens: role.maxTokens, temperature: role.temperature, top_p: role.topP };
-        try {
-            const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${role.apiKey}` }, body: JSON.stringify(requestBody) });
-            if (!resp.ok) throw new Error(await resp.text());
-            const data = await resp.json();
-            let reply = data.choices[0].message.content;
-            const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
-            return finalMatch ? finalMatch[1].trim() : reply;
-        } catch(err) { console.error(err); return `【调用失败】${err.message}`; }
+    if (!role.apiKey) { console.warn(role.name, "无API Key"); return null; }
+    const systemPrompt = role.jailbreakPrompt + "\n【角色设定】\n" + role.charPrompt + (role.lorebook ? "\n【世界】"+role.lorebook : "") + (role.longTermSummary ? "\n【记忆】"+role.longTermSummary : "");
+    const apiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.isUser ? "user" : "assistant", content: m.content }))];
+    let finalUrl = role.getApiUrl();
+    const proxyBase = corsProxyInput.value.trim();
+    if (proxyBase) {
+        finalUrl = proxyBase + '?url=' + encodeURIComponent(finalUrl);
     }
+    const requestBody = { model: role.model, messages: apiMessages, max_tokens: role.maxTokens, temperature: role.temperature, top_p: role.topP };
+    try {
+        const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${role.apiKey}` }, body: JSON.stringify(requestBody) });
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        let reply = data.choices[0].message.content;
+        const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
+        return finalMatch ? finalMatch[1].trim() : reply;
+    } catch(err) { console.error(err); return `【调用失败】${err.message}`; }
+}
 
     async function handleGroupSend() {
         const text = userInput.value.trim();
