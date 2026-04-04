@@ -422,8 +422,8 @@ async function saveSettingsFromSidebar() {
 function setupApiSettingsApp() {
     const e = document.getElementById('api-form'), t = document.getElementById('fetch-models-btn'),
         a = document.getElementById('api-model'), n = document.getElementById('api-provider'),
-        r = document.getElementById('api-url'), s = document.getElementById('api-key'), 
-        // 新增三个输入框
+        r = document.getElementById('api-url'), s = document.getElementById('api-key'),
+        // 新增：获取主机、路径、代理输入框
         apiHostInput = document.getElementById('api-host'),
         apiPathInput = document.getElementById('api-path'),
         corsProxyInput = document.getElementById('api-cors-proxy'),
@@ -437,25 +437,26 @@ function setupApiSettingsApp() {
     // --- 加载已有设置 ---
     if (db.apiSettings) {
         n.value = db.apiSettings.provider || 'newapi';
-        // 兼容旧数据：优先使用 apiHost+apiPath，如果没有则使用 url
-        if (db.apiSettings.apiHost && db.apiSettings.apiPath) {
-            if (apiHostInput) apiHostInput.value = db.apiSettings.apiHost;
-            if (apiPathInput) apiPathInput.value = db.apiSettings.apiPath;
-            r.value = db.apiSettings.apiHost + db.apiSettings.apiPath;
-        } else if (db.apiSettings.url) {
-            r.value = db.apiSettings.url;
-            // 尝试拆分 url 到 host 和 path（可选，方便用户）
+        
+        // 恢复主机、路径、代理
+        if (apiHostInput && db.apiSettings.apiHost) apiHostInput.value = db.apiSettings.apiHost;
+        if (apiPathInput && db.apiSettings.apiPath) apiPathInput.value = db.apiSettings.apiPath;
+        if (corsProxyInput && db.apiSettings.corsProxy) corsProxyInput.value = db.apiSettings.corsProxy;
+        
+        // 兼容旧数据：如果 apiHost 和 apiPath 为空但存在 url，则拆分填充
+        if ((!db.apiSettings.apiHost || !db.apiSettings.apiPath) && db.apiSettings.url) {
             try {
-                const url = new URL(db.apiSettings.url);
-                if (apiHostInput) apiHostInput.value = url.origin;
-                if (apiPathInput) apiPathInput.value = url.pathname;
+                const urlObj = new URL(db.apiSettings.url);
+                if (apiHostInput) apiHostInput.value = urlObj.origin;
+                if (apiPathInput) apiPathInput.value = urlObj.pathname;
             } catch(e) {}
         }
+        
+        r.value = db.apiSettings.url || '';
         s.value = db.apiSettings.key || '';
         if (db.apiSettings.model) {
             a.innerHTML = `<option value="${db.apiSettings.model}">${db.apiSettings.model}</option>`;
         }
-        if (corsProxyInput && db.apiSettings.corsProxy) corsProxyInput.value = db.apiSettings.corsProxy;
     }
     
     // 时间感知开关
@@ -481,34 +482,19 @@ function setupApiSettingsApp() {
         });
     }
 
-    // 预设提供商地址填充
+    populateApiSelect();
     n.addEventListener('change', () => {
         r.value = c[n.value] || '';
-        // 如果用户选择了预设，也自动填充主机和路径
-        if (apiHostInput && apiPathInput) {
-            const url = c[n.value] || '';
-            if (url) {
-                try {
-                    const u = new URL(url);
-                    apiHostInput.value = u.origin;
-                    apiPathInput.value = u.pathname;
-                } catch(e) {}
-            } else {
-                apiHostInput.value = '';
-                apiPathInput.value = '';
-            }
-        }
     });
 
-    // 提取拉取模型函数为全局（保持不变）
+    // 拉取模型列表函数
     window.fetchAndPopulateModels = async (showToastFlag = true) => {
         const provider = n.value;
         let apiUrl = '';
-        // 优先使用主机+路径
         if (apiHostInput && apiPathInput) {
             apiUrl = (apiHostInput.value || '') + (apiPathInput.value || '');
         }
-        if (!apiUrl) apiUrl = r.value.trim(); // 兼容旧输入框
+        if (!apiUrl) apiUrl = r.value.trim();
         const apiKey = s.value.trim();
         const modelSelect = a;
         const fetchBtn = t;
@@ -523,11 +509,24 @@ function setupApiSettingsApp() {
             return;
         }
 
-        if (apiUrl.endsWith('/')) apiUrl = apiUrl.slice(0, -1);
-        
-        const endpoint = provider === 'gemini' 
-            ? `${apiUrl}/v1beta/models?key=${getRandomValue(apiKey)}` 
-            : `${apiUrl}/v1/models`;
+        // 移除末尾的 /chat/completions
+        let baseUrl = apiUrl.replace(/\/chat\/completions$/i, '');
+        if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+
+        let endpoint;
+        if (provider === 'gemini') {
+            endpoint = `${baseUrl}/v1beta/models?key=${getRandomValue(apiKey)}`;
+        } else {
+            endpoint = `${baseUrl}/v1/models`;
+        }
+
+        // 使用代理（如果配置了）
+        const corsProxy = corsProxyInput ? corsProxyInput.value.trim() : '';
+        if (corsProxy) {
+            let proxyBase = corsProxy.trim();
+            if (!proxyBase.endsWith('?url=')) proxyBase += '?url=';
+            endpoint = proxyBase + encodeURIComponent(endpoint);
+        }
 
         if (fetchBtn) {
             fetchBtn.classList.add('loading');
@@ -537,36 +536,39 @@ function setupApiSettingsApp() {
         try {
             const headers = provider === 'gemini' ? {} : { Authorization: `Bearer ${apiKey}` };
             const response = await fetch(endpoint, { method: 'GET', headers });
-            if (!response.ok) {
-                const error = new Error(`网络响应错误: ${response.status}`);
-                error.response = response;
-                throw error;
-            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
             let models = [];
             if (provider !== 'gemini' && data.data) {
-                models = data.data.map(e => e.id);
+                models = data.data.map(m => m.id);
             } else if (provider === 'gemini' && data.models) {
-                models = data.models.map(e => e.name.replace('models/', ''));
+                models = data.models.map(m => m.name.replace('models/', ''));
             }
-            const currentVal = modelSelect.value;
+            const currentModel = modelSelect.value === 'custom' ? customModelInput.value : modelSelect.value;
             modelSelect.innerHTML = '';
             if (models.length > 0) {
-                models.forEach(m => {
+                models.forEach(mid => {
                     const opt = document.createElement('option');
-                    opt.value = m;
-                    opt.textContent = m;
+                    opt.value = mid;
+                    opt.textContent = mid;
                     modelSelect.appendChild(opt);
                 });
-                if (models.includes(currentVal)) {
-                    modelSelect.value = currentVal;
-                } else if (db.apiSettings && db.apiSettings.model && models.includes(db.apiSettings.model)) {
-                    modelSelect.value = db.apiSettings.model;
+                const customOpt = document.createElement('option');
+                customOpt.value = 'custom';
+                customOpt.textContent = '自定义';
+                modelSelect.appendChild(customOpt);
+                if (models.includes(currentModel)) {
+                    modelSelect.value = currentModel;
+                    customModelField.style.display = 'none';
+                } else {
+                    modelSelect.value = 'custom';
+                    customModelInput.value = currentModel;
+                    customModelField.style.display = 'block';
                 }
-                if (showToastFlag) showToast('模型列表拉取成功！');
+                if (showToastFlag) showToast(`✅ 成功拉取 ${models.length} 个模型`);
             } else {
-                modelSelect.innerHTML = '<option value="">未找到任何模型</option>';
-                if (showToastFlag) showToast('未找到任何模型');
+                modelSelect.innerHTML = '<option value="">未找到模型</option>';
+                if (showToastFlag) showToast('未找到模型');
             }
         } catch (err) {
             console.error(err);
@@ -584,7 +586,7 @@ function setupApiSettingsApp() {
 
     t.addEventListener('click', () => window.fetchAndPopulateModels(true));
     
-    // --- 表单保存事件（关键修改）---
+    // --- 保存 API 设置（包含新字段）---
     e.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!a.value) return showToast('请选择模型后保存！');
@@ -595,7 +597,6 @@ function setupApiSettingsApp() {
         const corsProxy = corsProxyInput ? corsProxyInput.value : '';
         const fullUrl = apiHost + apiPath;
         
-        // 检查屏蔽域名（基于完整 URL）
         if (BLOCKED_API_DOMAINS.some(domain => fullUrl.includes(domain))) {
             return showToast('该 API 站点已被屏蔽，无法保存！');
         }
@@ -616,6 +617,7 @@ function setupApiSettingsApp() {
         showToast('API设置已保存！');
     });
 }
+
 // --- 预设管理 ---
 function _getApiPresets() {
     return db.apiPresets || [];
