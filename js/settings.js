@@ -513,7 +513,7 @@ window.fetchAndPopulateModels = fetchAndPopulateModels;
 function setupApiSettingsApp() {
     const e = document.getElementById('api-form'), t = document.getElementById('fetch-models-btn'),
         a = document.getElementById('api-model'), n = document.getElementById('api-provider'),
-        r = document.getElementById('api-url'), s = document.getElementById('api-key'),
+        s = document.getElementById('api-key'),
         apiHostInput = document.getElementById('api-host'),
         apiPathInput = document.getElementById('api-path'),
         corsProxyInput = document.getElementById('api-cors-proxy'),
@@ -541,7 +541,6 @@ function setupApiSettingsApp() {
                 if (apiPathInput) apiPathInput.value = urlObj.pathname;
             } catch(e) {}
         }
-        r.value = db.apiSettings.url || '';
         s.value = db.apiSettings.key || '';
         if (db.apiSettings.model) {
             a.innerHTML = `<option value="${db.apiSettings.model}">${db.apiSettings.model}</option>`;
