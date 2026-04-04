@@ -278,7 +278,12 @@ let endpoint;
 if (provider === 'gemini') {
     endpoint = `${fullUrl}/v1beta/models/${model}:streamGenerateContent?key=${getRandomValue(key)}`;
 } else {
-    endpoint = `${fullUrl}/v1/chat/completions`;
+    // 如果 fullUrl 已经以 /chat/completions 结尾，则不再添加
+    if (fullUrl.endsWith('/chat/completions')) {
+        endpoint = fullUrl;
+    } else {
+        endpoint = `${fullUrl}/v1/chat/completions`;
+    }
 }
 
 // 如果配置了 CORS 代理，则包裹 endpoint
