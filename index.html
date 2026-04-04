@@ -138,7 +138,15 @@
                     <div id="dailySummaryBox" class="summary-box">🌙 暂无总结</div>
                     <button id="generateSummaryBtn" class="small-btn">✍️ 生成昨日情书总结</button>
                     <div class="calendar-panel"><div class="calendar-header"><div class="calendar-date-input"><input type="date" id="historyDatePicker"></div><button id="viewHistoryBtn" class="small-btn" style="width:auto; margin-top:0;">📖 查看</button></div><div id="historySummaryDisplay" class="summary-box" style="max-height:100px;">选择日期查看情书</div></div>
-                    <div class="char-actions"><button id="exportCharBtn">📤 导出此角色</button><button id="deleteCharBtn" style="background:#c98a6b;">🗑️ 删除</button></div>
+                    <div class="char-actions">
+    <button id="exportCharBtn">📤 导出此角色</button>
+    <button id="deleteCharBtn" style="background:#c98a6b;">🗑️ 删除</button>
+</div>
+<div style="display: flex; gap: 8px; margin-top: 8px;">
+    <button id="exportChatBtn" class="small-btn" style="background:#8b6b42;">💬 导出聊天记录</button>
+    <button id="exportSummaryBtn" class="small-btn" style="background:#8b6b42;">📅 导出情书总结</button>
+    <button id="exportSettingsBtn" class="small-btn" style="background:#8b6b42;">⚙️ 导出设定</button>
+</div>
                     <div class="field"><label>📂 导入角色 (JSON/PNG)</label><input type="file" id="importCharInput" accept=".json,.png"><button id="importCharBtn" class="small-btn">📥 导入为新角色</button></div>
                 </div>
 
@@ -189,19 +197,27 @@
             return this.apiHost + this.apiPath;
         }
 	// 为某条 AI 消息添加备选回复
-addAlternative(msgIndex, newContent) {
+addAlternative(msgIndex, newContent, newThinking = null) {
     const msg = this.conversationHistory[msgIndex];
     if (!msg || msg.role !== 'assistant') return false;
+    
+    // 初始化备选数组（如果不存在）
     if (!msg.alternatives) {
         msg.alternatives = [msg.content];
+        msg.alternativesThinking = [msg.thinking]; // 同时保存初始思考内容
         msg.currentIndex = 0;
     }
-    // 避免重复添加相同内容
+    
+    // 避免重复添加完全相同的内容（可选）
     if (!msg.alternatives.includes(newContent)) {
         msg.alternatives.push(newContent);
+        msg.alternativesThinking.push(newThinking);
     }
-    msg.currentIndex = msg.alternatives.length - 1; // 切换到最新
+    
+    // 切换到最新版本
+    msg.currentIndex = msg.alternatives.length - 1;
     msg.content = newContent;
+    msg.thinking = newThinking;
     return true;
 }
 // 切换到指定的备选回复
@@ -211,6 +227,10 @@ switchAlternative(msgIndex, altIndex) {
     if (altIndex >= 0 && altIndex < msg.alternatives.length) {
         msg.currentIndex = altIndex;
         msg.content = msg.alternatives[altIndex];
+        // 同步切换思考内容
+        if (msg.alternativesThinking && msg.alternativesThinking[altIndex] !== undefined) {
+            msg.thinking = msg.alternativesThinking[altIndex];
+        }
         // 删除该消息之后的所有历史（分支截断）
         this.conversationHistory = this.conversationHistory.slice(0, msgIndex + 1);
         return true;
@@ -323,7 +343,30 @@ switchAlternative(msgIndex, altIndex) {
     function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
 
     function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 8); }
+    // 统计中文字符数（简单计数，忽略英文字母、数字、空格）
+function countChineseChars(str) {
+    if (!str) return 0;
+    const chineseOnly = str.replace(/[a-zA-Z0-9\s\uFF00-\uFFEF]/g, '');
+    return chineseOnly.length;
+}
 
+// 截断文本到指定中文字符数
+function truncateToWordLimit(text, maxWords) {
+    let result = '';
+    let count = 0;
+    for (let i = 0; i < text.length && count < maxWords; i++) {
+        const char = text[i];
+        result += char;
+        // 如果是中文字符（非ASCII）
+        if (char.charCodeAt(0) > 127) {
+            count++;
+        }
+    }
+    if (count >= maxWords && text.length > result.length) {
+        result += '……';
+    }
+    return result;
+}
     function saveAllToLocal() {
         const charsData = characters.map(c => ({
             id: c.id, name: c.name, charPrompt: c.charPrompt, userPrompt: c.userPrompt, lorebook: c.lorebook,
@@ -378,6 +421,16 @@ switchAlternative(msgIndex, altIndex) {
                 "https://api.deepseek.com", "/v1/chat/completions", "", "deepseek-chat", 0.85, 0.9, 2000, 50, 500, 50);
             characters.push(defaultChar);
         }
+	characters.forEach(char => {
+    if (char.conversationHistory) {
+        char.conversationHistory.forEach(msg => {
+            if (msg.role === 'assistant' && msg.alternatives && !msg.alternativesThinking) {
+                // 为每个备选回复填充相同的 thinking 内容（旧数据只有一个版本）
+                msg.alternativesThinking = msg.alternatives.map(() => msg.thinking);
+            }
+        });
+    }
+});
         currentCharId = localStorage.getItem('currentCharId');
         if (!currentCharId || !characters.find(c => c.id === currentCharId)) currentCharId = characters[0].id;
         currentMode = localStorage.getItem('currentMode') || "single";
@@ -568,75 +621,92 @@ dailySummaryBox.innerHTML = summaryText;
         chatArea.innerHTML = '';
         if (!char || !char.conversationHistory.length) { chatArea.innerHTML = '<div style="text-align:center; padding:20px;">✨ 待君寄来第一封信 ✨</div>'; return; }
         for (let i = 0; i < char.conversationHistory.length; i++) {
-            const msg = char.conversationHistory[i];
-            if (msg.role === 'user' || msg.role === 'assistant') addMessageToUI(msg.content, msg.role, msg.timestamp, i);
-        }
+    const msg = char.conversationHistory[i];
+    if (msg.role === 'user' || msg.role === 'assistant') 
+        addMessageToUI(msg.content, msg.role, msg.timestamp, i, msg.usage, msg.thinking);
+}
     }
 
-    function addMessageToUI(content, role, timestamp, index, usage = null) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message-card ${role === 'user' ? 'user-letter' : 'ai-letter'}`;
-        const paper = document.createElement('div'); paper.className = 'letter-paper';
-        const stamp = document.createElement('span'); stamp.className = 'stamp'; if (role === 'user') {
+    function addMessageToUI(content, role, timestamp, index, usage = null, thinking = null) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message-card ${role === 'user' ? 'user-letter' : 'ai-letter'}`;
+    const paper = document.createElement('div'); paper.className = 'letter-paper';
+    const stamp = document.createElement('span'); stamp.className = 'stamp'; 
+    if (role === 'user') {
         const userName = getCurrentChar()?.userName || "某";
         stamp.textContent = userName.charAt(0);
-} else {
-       stamp.textContent = getCurrentChar()?.name.charAt(0) || "卿";
-}
-        const contentSpan = document.createElement('div'); contentSpan.style.whiteSpace = 'pre-wrap'; contentSpan.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
-        const sig = document.createElement('div'); sig.className = 'signature'; if (role === 'user') {
-    	const userName = getCurrentChar()?.userName || "某";
-   	sig.textContent = `—— ${userName} 顿首`;
-	} else {
-    	sig.textContent = `—— ${getCurrentChar()?.name || '卿'} 谨复`;
-	}
-        const timeSpan = document.createElement('div'); timeSpan.className = 'timestamp'; timeSpan.textContent = timestamp || '时间不详';
-        const tokenSpan = document.createElement('div'); tokenSpan.className = 'timestamp'; tokenSpan.style.fontSize = '0.5rem'; tokenSpan.style.color = '#b99e7c';
-        if (usage && usage.total_tokens) tokenSpan.textContent = `🔢 ${usage.total_tokens} tokens`; else tokenSpan.textContent = '';
-        const actions = document.createElement('div'); actions.className = 'message-actions';
-        if (role === 'user') {
-    const editBtn = document.createElement('button');
-    editBtn.textContent = '✏️ 编辑';
-    editBtn.onclick = () => editUserMessage(index);
-    actions.appendChild(editBtn);
-    // 新增：删除按钮
-    const delBtn = document.createElement('button');
-    delBtn.textContent = '🗑️ 删除';
-    delBtn.onclick = () => deleteMessage(index);
-    actions.appendChild(delBtn);
-       } else {
-    // 获取消息的备选列表
-    const msg = getCurrentChar()?.conversationHistory[index];
-    const alternatives = msg?.alternatives || [];
-    const hasMultiple = alternatives.length > 1;
+    } else {
+        stamp.textContent = getCurrentChar()?.name.charAt(0) || "卿";
+    }
+    const contentSpan = document.createElement('div'); contentSpan.style.whiteSpace = 'pre-wrap'; contentSpan.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+    const sig = document.createElement('div'); sig.className = 'signature'; 
+    if (role === 'user') {
+        const userName = getCurrentChar()?.userName || "某";
+        sig.textContent = `—— ${userName} 顿首`;
+    } else {
+        sig.textContent = `—— ${getCurrentChar()?.name || '卿'} 谨复`;
+    }
+    const timeSpan = document.createElement('div'); timeSpan.className = 'timestamp'; timeSpan.textContent = timestamp || '时间不详';
+    const tokenSpan = document.createElement('div'); tokenSpan.className = 'timestamp'; tokenSpan.style.fontSize = '0.5rem'; tokenSpan.style.color = '#b99e7c';
+    if (usage && usage.total_tokens) tokenSpan.textContent = `🔢 ${usage.total_tokens} tokens`; else tokenSpan.textContent = '';
     
-    // 如果有多条备选，显示切换按钮
-    if (hasMultiple) {
-        const switchBtn = document.createElement('button');
-        switchBtn.textContent = `↻ 切换回复 (${msg.currentIndex+1}/${alternatives.length})`;
-        switchBtn.onclick = () => {
-            const newIndex = (msg.currentIndex + 1) % alternatives.length;
-            if (getCurrentChar().switchAlternative(index, newIndex)) {
-                saveAllToLocal();
-                renderChatHistory();
-            }
-        };
-        actions.appendChild(switchBtn);
+    // 如果是 AI 回复且有思考内容，显示可折叠的思考块
+    if (role === 'assistant' && thinking && thinking.trim()) {
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = '💭 思考过程（点击展开）';
+        summary.style.fontSize = '0.65rem';
+        summary.style.cursor = 'pointer';
+        summary.style.color = '#b68b5a';
+        const thinkDiv = document.createElement('div');
+        thinkDiv.style.fontSize = '0.7rem';
+        thinkDiv.style.color = '#8b6b42';
+        thinkDiv.style.marginTop = '4px';
+        thinkDiv.style.whiteSpace = 'pre-wrap';
+        thinkDiv.innerHTML = escapeHtml(thinking).replace(/\n/g, '<br>');
+        details.appendChild(summary);
+        details.appendChild(thinkDiv);
+        paper.appendChild(details);
     }
     
-    // 重新生成按钮（始终显示）
-    const regenBtn = document.createElement('button');
-    regenBtn.textContent = '🔄 重新生成';
-    regenBtn.onclick = () => regenerateAIResponse(index);
-    actions.appendChild(regenBtn);
-    const delBtn = document.createElement('button');
-     delBtn.textContent = '🗑️ 删除';
-     delBtn.onclick = () => deleteMessage(index);
-     actions.appendChild(delBtn);
-}
-        paper.appendChild(stamp); paper.appendChild(contentSpan); paper.appendChild(sig); paper.appendChild(timeSpan); paper.appendChild(tokenSpan); paper.appendChild(actions);
-        messageDiv.appendChild(paper); chatArea.appendChild(messageDiv); chatArea.scrollTop = chatArea.scrollHeight;
+    const actions = document.createElement('div'); actions.className = 'message-actions';
+    if (role === 'user') {
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '✏️ 编辑';
+        editBtn.onclick = () => editUserMessage(index);
+        actions.appendChild(editBtn);
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑️ 删除';
+        delBtn.onclick = () => deleteMessage(index);
+        actions.appendChild(delBtn);
+    } else {
+        const msg = getCurrentChar()?.conversationHistory[index];
+        const alternatives = msg?.alternatives || [];
+        const hasMultiple = alternatives.length > 1;
+        if (hasMultiple) {
+            const switchBtn = document.createElement('button');
+            switchBtn.textContent = `↻ 切换回复 (${msg.currentIndex+1}/${alternatives.length})`;
+            switchBtn.onclick = () => {
+                const newIndex = (msg.currentIndex + 1) % alternatives.length;
+                if (getCurrentChar().switchAlternative(index, newIndex)) {
+                    saveAllToLocal();
+                    renderChatHistory();
+                }
+            };
+            actions.appendChild(switchBtn);
+        }
+        const regenBtn = document.createElement('button');
+        regenBtn.textContent = '🔄 重新生成';
+        regenBtn.onclick = () => regenerateAIResponse(index);
+        actions.appendChild(regenBtn);
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑️ 删除';
+        delBtn.onclick = () => deleteMessage(index);
+        actions.appendChild(delBtn);
     }
+    paper.appendChild(stamp); paper.appendChild(contentSpan); paper.appendChild(sig); paper.appendChild(timeSpan); paper.appendChild(tokenSpan); paper.appendChild(actions);
+    messageDiv.appendChild(paper); chatArea.appendChild(messageDiv); chatArea.scrollTop = chatArea.scrollHeight;
+}
 
     async function editUserMessage(msgIndex) {
     const char = getCurrentChar(); if (!char) return;
@@ -651,14 +721,16 @@ dailySummaryBox.innerHTML = summaryText;
     hideTyping();
     if (result && result.reply) {
         char.conversationHistory.push({
-            role: "assistant",
-            content: result.reply,
-            timestamp: getCurrentTimestamp(),
-            alternatives: [result.reply],
-            currentIndex: 0
-        });
+    role: "assistant",
+    content: result.reply,
+    timestamp: getCurrentTimestamp(),
+    alternatives: [result.reply],
+    alternativesThinking: [result.thinking],  
+    currentIndex: 0,
+    thinking: result.thinking   // 新增
+});
         saveAllToLocal();
-        addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), char.conversationHistory.length-1, result.usage);
+        addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), char.conversationHistory.length-1, result.usage, result.thinking);
     }
 }
     async function deleteMessage(msgIndex) {
@@ -670,7 +742,7 @@ dailySummaryBox.innerHTML = summaryText;
         renderChatHistory();
     }
 }
-   async function regenerateAIResponse(msgIndex) {
+  async function regenerateAIResponse(msgIndex) {
     const char = getCurrentChar();
     if (!char) return;
     const msg = char.conversationHistory[msgIndex];
@@ -685,24 +757,20 @@ dailySummaryBox.innerHTML = summaryText;
     }
     const userMsg = char.conversationHistory[userMsgIndex];
     
-    // 重要：不要截断历史！保留原有所有对话，包括当前 AI 回复。
-    // 直接调用 API 生成新回复
     showTyping();
     const result = await callSingleAI(userMsg.content);
     hideTyping();
     
     if (result && result.reply) {
-        // 使用 addAlternative 方法将新回复添加到备选列表中
-        const success = char.addAlternative(msgIndex, result.reply);
-        if (success) {
-            // 更新 usage 信息（可选，因为 addAlternative 没有保存 usage，可以手动添加）
-            // 注意：addAlternative 不会保存 usage，但我们可以将 usage 附加到消息上
-            if (result.usage) {
-                char.conversationHistory[msgIndex].usage = result.usage;
-            }
-            saveAllToLocal();
-            renderChatHistory(); // 重新渲染，会显示切换按钮
-        } else {
+        const success = char.addAlternative(msgIndex, result.reply, result.thinking);
+if (success) {
+    if (result.usage) {
+        char.conversationHistory[msgIndex].usage = result.usage;
+    }
+    // 注意：addAlternative 内部已经设置了 msg.thinking，所以不需要再单独设置
+    saveAllToLocal();
+    renderChatHistory();
+} else {
             alert("添加备选回复失败");
         }
     } else {
@@ -711,41 +779,76 @@ dailySummaryBox.innerHTML = summaryText;
 }
 
     async function callSingleAI(userMessage) {
-        const char = getCurrentChar();
-        if (!char) return { reply: null, usage: null };
-        if (!char.apiKey) { alert("请填写API Key"); return { reply: "【无API Key】", usage: null }; }
-        const systemPrompt = buildSystemPrompt(char);
-        const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
-        const finalUrl = char.getApiUrl();
-        const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
-        if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
-        try {
-            const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
-            if (!resp.ok) throw new Error(await resp.text());
-            const data = await resp.json();
-            let reply = data.choices[0].message.content;
-            const finalMatch = reply.match(/【最终回复】\s*([\s\S]*?)$/);
-            const finalReply = finalMatch ? finalMatch[1].trim() : reply;
-            const usage = data.usage || null;
-            return { reply: finalReply, usage };
-        } catch(err) {
-            console.error(err);
-            return { reply: "【信差迷途】" + err.message, usage: null };
-        }
-    }
+    const char = getCurrentChar();
+    if (!char) return { reply: null, usage: null, thinking: null };
+    if (!char.apiKey) { alert("请填写API Key"); return { reply: "【无API Key】", usage: null, thinking: null }; }
+    const systemPrompt = buildSystemPrompt(char);
+    const apiMessages = [{ role: "system", content: systemPrompt }, ...char.conversationHistory.map(m => ({ role: m.role, content: m.content }))];
+    const finalUrl = char.getApiUrl();
+    const requestBody = { model: char.model, messages: apiMessages, max_tokens: char.maxTokens, temperature: char.temperature, top_p: char.topP };
+    if (char.topK && char.topK > 0) requestBody.top_k = char.topK;
+    try {
+        const resp = await fetch(finalUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${char.apiKey}` }, body: JSON.stringify(requestBody) });
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        let fullReply = data.choices[0].message.content;
+        let thinking = null;
+        let finalReply = fullReply;
 
-    function buildSystemPrompt(char) {
-        let parts = [];
-        if (char.jailbreakPrompt) parts.push(char.jailbreakPrompt);
-        let roleSection = `【角色设定】\n${char.charPrompt}`;
-        if (char.userPrompt) roleSection += `\n\n【对方人设】\n${char.userPrompt}`;
-        if (char.lorebook) roleSection += `\n\n【世界背景】\n${char.lorebook}`;
-        parts.push(roleSection);
-        if (char.longTermSummary && char.longTermSummary !== "暂无总结") parts.push(`【长情记忆】\n${char.longTermSummary}`);
-        parts.push(`【字数限制】请控制回复在 ${char.minWords}-${char.maxWords} 字之间。输出格式：\n【思考过程】\n【最终回复】`);
-        parts.push(`【当前时间】${new Date().toLocaleString()}`);
-        return parts.join('\n\n---\n\n');
+        // 1. 优先检查是否有独立的 reasoning_content 字段（DeepSeek Reasoner 等）
+        if (data.choices[0].message.reasoning_content) {
+            thinking = data.choices[0].message.reasoning_content;
+            finalReply = fullReply;
+        }
+        // 2. 否则尝试解析 【思考过程】...【最终回复】 标签
+        else {
+            const thinkMatch = fullReply.match(/【思考过程】\s*([\s\S]*?)\s*【最终回复】/i);
+            if (thinkMatch) {
+                thinking = thinkMatch[1].trim();
+                finalReply = fullReply.replace(/【思考过程】\s*[\s\S]*?\s*【最终回复】/i, '').trim();
+            }
+        }
+
+        // 字数限制：基于最终回复计算
+        const finalReplyText = finalReply || fullReply;
+        const charCount = countChineseChars(finalReplyText);
+        const minW = char.minWords;
+        const maxW = char.maxWords;
+        let finalText = finalReplyText;
+        if (charCount > maxW) {
+            finalText = truncateToWordLimit(finalReplyText, maxW);
+            finalText += `\n\n（原回复${charCount}字，已截断至${maxW}字）`;
+        } else if (charCount < minW) {
+            console.log(`回复字数${charCount}，低于设定最小值${minW}`);
+        }
+
+        const usage = data.usage || null;
+        return { reply: finalText, usage, thinking };
+    } catch(err) {
+        console.error(err);
+        return { reply: "【信差迷途】" + err.message, usage: null, thinking: null };
     }
+}
+
+   function buildSystemPrompt(char) {
+    let parts = [];
+    if (char.jailbreakPrompt) parts.push(char.jailbreakPrompt);
+    let roleSection = `【角色设定】\n${char.charPrompt}`;
+    if (char.userPrompt) roleSection += `\n\n【对方人设】\n${char.userPrompt}`;
+    if (char.lorebook) roleSection += `\n\n【世界背景】\n${char.lorebook}`;
+    parts.push(roleSection);
+    if (char.longTermSummary && char.longTermSummary !== "暂无总结") parts.push(`【长情记忆】\n${char.longTermSummary}`);
+    
+    // 替换原来的字数限制和输出格式
+    parts.push(`【输出格式要求 - 非常重要】
+你必须严格按照以下格式输出，不能有任何偏差：
+首先输出【思考过程】标签，然后换行输出你的思考内容（可以详细，但最终回复会单独提取）。
+然后输出【最终回复】标签，换行输出角色真正要说的话（只输出角色说的话，不要有其他解释，且字数控制在 ${char.minWords} 到 ${char.maxWords} 字之间）。
+注意：不要省略标签，不要添加额外说明。`);
+    
+    parts.push(`【当前时间】${new Date().toLocaleString()}`);
+    return parts.join('\n\n---\n\n');
+}
 
     let typingDiv = null;
     function showTyping() { if(typingDiv) typingDiv.remove(); typingDiv = document.createElement('div'); typingDiv.className = 'message-card ai-letter'; typingDiv.innerHTML = `<div class="letter-paper"><div class="typing-indicator">✍️ 研墨中...</div></div>`; chatArea.appendChild(typingDiv); chatArea.scrollTop = chatArea.scrollHeight; }
@@ -796,15 +899,17 @@ dailySummaryBox.innerHTML = summaryText;
     if (result && result.reply) {
         const newMsgIndex = char.conversationHistory.length;
         char.conversationHistory.push({
-            role: "assistant",
-            content: result.reply,
-            timestamp: getCurrentTimestamp(),
-            alternatives: [result.reply],
-            currentIndex: 0
-        });
+    	role: "assistant",
+    content: result.reply,
+    timestamp: getCurrentTimestamp(),
+    alternatives: [result.reply],
+    alternativesThinking: [result.thinking],  
+    currentIndex: 0,
+    thinking: result.thinking  // 新增
+});
         while (char.conversationHistory.length > char.memoryLimit) char.conversationHistory.shift();
         saveAllToLocal();
-        addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), newMsgIndex, result.usage);
+        addMessageToUI(result.reply, 'assistant', getCurrentTimestamp(), newMsgIndex, result.usage, result.thinking);
     } else {
         alert("AI 回复失败，请检查控制台错误或 API 配置");
     }
@@ -976,6 +1081,81 @@ if (saveAllBtn) {
             const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`角色_${char.name}.json`; a.click(); URL.revokeObjectURL(a.href);
         }
     });
+document.getElementById('exportChatBtn').addEventListener('click', exportChatHistory);
+document.getElementById('exportSummaryBtn').addEventListener('click', exportDailySummaries);
+document.getElementById('exportSettingsBtn').addEventListener('click', exportSettings);
+// 导出聊天记录（仅 conversationHistory）
+function exportChatHistory() {
+    const char = getCurrentChar();
+    if (!char) return;
+    const data = {
+        version: "1.0",
+        exportTime: new Date().toLocaleString(),
+        characterName: char.name,
+        conversationHistory: char.conversationHistory
+    };
+    downloadJSON(data, `聊天记录_${char.name}_${Date.now()}.json`);
+}
+
+// 导出每日情书总结
+function exportDailySummaries() {
+    const char = getCurrentChar();
+    if (!char) return;
+    const data = {
+        version: "1.0",
+        exportTime: new Date().toLocaleString(),
+        characterName: char.name,
+        dailySummaries: char.dailySummaries
+    };
+    downloadJSON(data, `情书总结_${char.name}_${Date.now()}.json`);
+}
+
+// 导出设定（排除聊天记录和 dailySummaries，但保留其他所有字段）
+function exportSettings() {
+    const char = getCurrentChar();
+    if (!char) return;
+    // 复制角色对象，排除 conversationHistory 和 dailySummaries
+    const settings = {
+        id: char.id,
+        name: char.name,
+        charPrompt: char.charPrompt,
+        userPrompt: char.userPrompt,
+        userName: char.userName,
+        lorebook: char.lorebook,
+        jailbreakPrompt: char.jailbreakPrompt,
+        memoryLimit: char.memoryLimit,
+        longTermSummary: char.longTermSummary,
+        apiHost: char.apiHost,
+        apiPath: char.apiPath,
+        apiKey: char.apiKey,
+        model: char.model,
+        temperature: char.temperature,
+        topP: char.topP,
+        topK: char.topK,
+        maxTokens: char.maxTokens,
+        minWords: char.minWords,
+        maxWords: char.maxWords
+    };
+    const data = {
+        version: "1.0",
+        exportTime: new Date().toLocaleString(),
+        characterName: char.name,
+        settings: settings
+    };
+    downloadJSON(data, `设定_${char.name}_${Date.now()}.json`);
+}
+
+// 辅助函数：下载 JSON 文件
+function downloadJSON(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
     deleteCharBtn.addEventListener('click', () => {
         if (characters.length <= 1) { alert("至少保留一个角色"); return; }
         if (!confirm(`删除角色「${getCurrentChar().name}」？`)) return;
@@ -1044,8 +1224,7 @@ if (saveAllBtn) {
         
         const summaryPrompt = `请根据以下昨日（${yesterday.toLocaleDateString()}）的对话内容，写一篇约300字的“昨日情书”风格总结。要求：
 1. 概括关键情节、情感变化、重要约定
-2. 文雅深情，像古人追忆前尘
-3. 不要列出条目，写成流畅散文或书信体
+2. 不要列出条目，写成流畅散文或书信体
 
 对话记录：
 ${convText}`;
@@ -1121,15 +1300,7 @@ ${convText}`;
     renderTabs();
     if (currentMode === 'single') loadCurrentCharToUI();
     else { renderGroupMessages(); renderGroupRoleList(); }
-    // 重新绑定寄信按钮（确保生效）
-if (sendBtn) {
-    sendBtn.removeEventListener('click', handleSingleSend); // 移除旧的可能无效的监听
-    sendBtn.addEventListener('click', () => {
-        if (currentMode === 'single') handleSingleSend();
-        else handleGroupSend();
-    });
-    console.log("寄信按钮已重新绑定");
-}
+    sendBtn.onclick = () => { if (currentMode === 'single') handleSingleSend(); else handleGroupSend(); };
 </script>
 </body>
 </html>
